@@ -48,6 +48,38 @@
           -ms-overflow-style: none;
           scrollbar-width: none;
       }
+
+      /* Print Styles */
+      @media print {
+        .no-print {
+          display: none !important;
+        }
+        .print-only {
+          display: block !important;
+        }
+        body {
+          background-color: white !important;
+          color: black !important;
+        }
+        #root {
+          margin: 0;
+          padding: 0;
+        }
+        /* Hide sidebar and chatbots */
+        aside, nav, button, input, select {
+          display: none !important;
+        }
+        /* Ensure content takes full width */
+        main {
+          margin-left: 0 !important;
+          width: 100% !important;
+        }
+        /* Remove shadows and borders for clean print */
+        div {
+          box-shadow: none !important;
+          border: none !important;
+        }
+      }
     </style>
   <script type="importmap">
 {

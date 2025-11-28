@@ -1,18 +1,22 @@
 import React, { useState } from 'react';
 import { InventoryItem } from '../types';
-import { Search, Plus, Package, AlertCircle, Filter, X, Check } from 'lucide-react';
+import { Search, Plus, Package, AlertCircle, Filter, X, Check, Edit2, Trash2 } from 'lucide-react';
 
 interface PharmacyProps {
   inventory: InventoryItem[];
   addInventoryItem: (item: InventoryItem) => void;
+  updateInventoryItem: (item: InventoryItem) => void;
+  deleteInventoryItem: (id: string) => void;
 }
 
-const Pharmacy: React.FC<PharmacyProps> = ({ inventory, addInventoryItem }) => {
+const Pharmacy: React.FC<PharmacyProps> = ({ inventory, addInventoryItem, updateInventoryItem, deleteInventoryItem }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
   
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+  
   const [newItem, setNewItem] = useState({
     name: '',
     category: 'Medicine',
@@ -32,22 +36,60 @@ const Pharmacy: React.FC<PharmacyProps> = ({ inventory, addInventoryItem }) => {
     setNewItem(prev => ({ ...prev, [name]: value }));
   };
 
+  const openAddModal = () => {
+      setEditingItem(null);
+      setNewItem({ name: '', category: 'Medicine', stock: '', unit: 'Tablets', price: '' });
+      setIsModalOpen(true);
+  };
+
+  const openEditModal = (item: InventoryItem) => {
+      setEditingItem(item);
+      setNewItem({
+          name: item.name,
+          category: item.category,
+          stock: item.stock.toString(),
+          unit: item.unit,
+          price: item.price.toString()
+      });
+      setIsModalOpen(true);
+  };
+
+  const handleDelete = (id: string) => {
+      if(confirm('Are you sure you want to remove this item from inventory?')) {
+          deleteInventoryItem(id);
+      }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newItem.name || !newItem.stock || !newItem.price) return;
 
-    const item: InventoryItem = {
-      id: Date.now().toString(),
-      name: newItem.name,
-      category: newItem.category as 'Medicine' | 'Supply' | 'Lab',
-      stock: Number(newItem.stock),
-      unit: newItem.unit,
-      price: Number(newItem.price)
-    };
+    if (editingItem) {
+        // Update existing
+        const updated: InventoryItem = {
+            ...editingItem,
+            name: newItem.name,
+            category: newItem.category as 'Medicine' | 'Supply' | 'Lab',
+            stock: Number(newItem.stock),
+            unit: newItem.unit,
+            price: Number(newItem.price)
+        };
+        updateInventoryItem(updated);
+    } else {
+        // Create new
+        const item: InventoryItem = {
+            id: Date.now().toString(),
+            name: newItem.name,
+            category: newItem.category as 'Medicine' | 'Supply' | 'Lab',
+            stock: Number(newItem.stock),
+            unit: newItem.unit,
+            price: Number(newItem.price)
+        };
+        addInventoryItem(item);
+    }
 
-    addInventoryItem(item);
     setIsModalOpen(false);
-    setNewItem({ name: '', category: 'Medicine', stock: '', unit: 'Tablets', price: '' });
+    setEditingItem(null);
   };
 
   return (
@@ -84,7 +126,7 @@ const Pharmacy: React.FC<PharmacyProps> = ({ inventory, addInventoryItem }) => {
                     />
                 </div>
                <button 
-                  onClick={() => setIsModalOpen(true)}
+                  onClick={openAddModal}
                   className="bg-teal-600 text-white flex items-center gap-2 px-5 py-2.5 rounded-xl hover:bg-teal-700 shadow-lg shadow-teal-200 dark:shadow-none font-medium w-full sm:w-auto justify-center transition-colors"
                >
                   <Plus className="w-5 h-5" />
@@ -133,7 +175,8 @@ const Pharmacy: React.FC<PharmacyProps> = ({ inventory, addInventoryItem }) => {
                         <th className="px-6 py-4">Category</th>
                         <th className="px-6 py-4">Stock Level</th>
                         <th className="px-6 py-4">Unit Price</th>
-                        <th className="px-6 py-4 text-right">Status</th>
+                        <th className="px-6 py-4">Status</th>
+                        <th className="px-6 py-4 text-right">Actions</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50 dark:divide-slate-700 text-sm">
@@ -167,7 +210,7 @@ const Pharmacy: React.FC<PharmacyProps> = ({ inventory, addInventoryItem }) => {
                             <td className="px-6 py-4 text-slate-600 dark:text-slate-300">
                                 KSh {item.price}
                             </td>
-                            <td className="px-6 py-4 text-right">
+                            <td className="px-6 py-4">
                                 {item.stock < 10 ? (
                                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs font-bold border border-red-100 dark:border-red-800">
                                         Low Stock
@@ -178,23 +221,41 @@ const Pharmacy: React.FC<PharmacyProps> = ({ inventory, addInventoryItem }) => {
                                     </span>
                                 )}
                             </td>
+                            <td className="px-6 py-4 text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                    <button 
+                                        onClick={() => openEditModal(item)}
+                                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg text-slate-500 dark:text-slate-400 transition-colors"
+                                    >
+                                        <Edit2 className="w-4 h-4" />
+                                    </button>
+                                    <button 
+                                        onClick={() => handleDelete(item.id)}
+                                        className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg text-red-500 transition-colors"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </td>
                         </tr>
                     ))}
                     {filtered.length === 0 && (
                         <tr>
-                            <td colSpan={5} className="px-6 py-8 text-center text-slate-400">No items found.</td>
+                            <td colSpan={6} className="px-6 py-8 text-center text-slate-400">No items found.</td>
                         </tr>
                     )}
                 </tbody>
             </table>
         </div>
 
-        {/* Add Item Modal */}
+        {/* Add/Edit Item Modal */}
         {isModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
                 <div className="bg-white dark:bg-slate-800 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
                     <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
-                        <h3 className="text-xl font-bold text-slate-900 dark:text-white">Add Inventory</h3>
+                        <h3 className="text-xl font-bold text-slate-900 dark:text-white">
+                            {editingItem ? 'Edit Inventory Item' : 'Add Inventory'}
+                        </h3>
                         <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
                             <X className="w-6 h-6" />
                         </button>
@@ -284,7 +345,7 @@ const Pharmacy: React.FC<PharmacyProps> = ({ inventory, addInventoryItem }) => {
                                 className="flex-1 py-3 text-white font-semibold bg-teal-600 hover:bg-teal-700 rounded-xl shadow-lg shadow-teal-200 dark:shadow-none transition-colors flex items-center justify-center gap-2"
                             >
                                 <Check className="w-5 h-5" />
-                                Save Item
+                                {editingItem ? 'Save Changes' : 'Add Item'}
                             </button>
                         </div>
                     </form>

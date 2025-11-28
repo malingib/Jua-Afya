@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+
+import React, { useState, useMemo, useEffect } from 'react';
 import { Appointment, InventoryItem, Patient, ViewState } from '../types';
 import { Users, Calendar, Activity, Search, Bell, ChevronDown, MoreHorizontal, Sparkles, LogOut, Settings, User, CheckCircle, AlertTriangle, Download, FileText, Share2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
@@ -11,7 +12,7 @@ interface DashboardProps {
   setView: (view: ViewState) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, setView }) => {
+const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory, setView }) => {
   const [briefing, setBriefing] = useState<string | null>(null);
   const [loadingBriefing, setLoadingBriefing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -23,16 +24,37 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, setView }
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
-  // Notification State
-  const [unreadCount, setUnreadCount] = useState(2);
-  const [notifications, setNotifications] = useState([
-    { id: 1, text: 'Low stock: Amoxicillin', type: 'alert', time: '10m ago', read: false },
-    { id: 2, text: 'New appointment: John Doe', type: 'info', time: '1h ago', read: false },
-    { id: 3, text: 'Daily report ready', type: 'success', time: '2h ago', read: true },
-  ]);
+  // Notification Logic
+  const [systemNotifications, setSystemNotifications] = useState<any[]>([]);
+  
+  useEffect(() => {
+      const msgs = [];
+      
+      // Check Low Stock
+      const lowStockItems = inventory.filter(i => i.stock < 10);
+      if (lowStockItems.length > 0) {
+          msgs.push({
+              id: 'stock-alert',
+              text: `Low stock alert: ${lowStockItems.length} items below threshold`,
+              type: 'alert',
+              time: 'Now',
+              read: false
+          });
+      }
+
+      // Add mock notifications for demo
+      msgs.push(
+          { id: 'mock-1', text: 'New appointment: John Doe', type: 'info', time: '1h ago', read: false },
+          { id: 'mock-2', text: 'Daily report ready', type: 'success', time: '2h ago', read: true }
+      );
+
+      setSystemNotifications(msgs);
+  }, [inventory]);
+
+  const unreadCount = systemNotifications.filter(n => !n.read).length;
 
   // Calendar State
-  const [selectedDay, setSelectedDay] = useState<number>(new Date().getDate());
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
   // Dynamic Data Generators based on TimeRange
   const getStatsByRange = (range: string) => {
@@ -78,7 +100,7 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, setView }
   // Logic
   const handleGetBriefing = async () => {
     setLoadingBriefing(true);
-    const lowStock = 5; 
+    const lowStock = inventory.filter(i => i.stock < 10).length;
     const text = await generateDailyBriefing(appointments.length, lowStock, 'KSh 45k');
     setBriefing(text);
     setLoadingBriefing(false);
@@ -90,8 +112,7 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, setView }
 
   const markAllRead = (e: React.MouseEvent) => {
       e.stopPropagation();
-      setNotifications(notifications.map(n => ({ ...n, read: true })));
-      setUnreadCount(0);
+      setSystemNotifications(prev => prev.map(n => ({ ...n, read: true })));
   };
 
   const filteredPatients = patients.filter(p => 
@@ -125,11 +146,10 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, setView }
 
   const calendarDays = generateCalendarDays();
 
-  // Filter appointments based on selected day (mock logic since mock dates are static strings)
+  // Filter appointments based on selected day
   const filteredAppointments = appointments.filter(appt => {
-      // For demo purposes, simply show first few or filter if logic was connected to real dates
-      return true; 
-  }).slice(0, 4);
+      return appt.date === selectedDate; 
+  });
 
   return (
     <div className="p-4 md:p-8 space-y-6 pb-24 md:pb-8 max-w-[1600px] mx-auto bg-gray-100 dark:bg-slate-900 min-h-screen transition-colors duration-200" onClick={() => {
@@ -218,7 +238,7 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, setView }
                             {unreadCount > 0 && <button onClick={markAllRead} className="text-xs text-brand-600 dark:text-brand-400 hover:underline">Mark all read</button>}
                         </div>
                         <div className="max-h-64 overflow-y-auto">
-                            {notifications.map((notif) => (
+                            {systemNotifications.length > 0 ? systemNotifications.map((notif) => (
                                 <div key={notif.id} className={`p-4 border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors flex gap-3 ${!notif.read ? 'bg-brand-50/30 dark:bg-brand-900/10' : ''}`}>
                                     <div className={`mt-1 w-2 h-2 rounded-full shrink-0 ${notif.type === 'alert' ? 'bg-red-500' : notif.type === 'success' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
                                     <div>
@@ -226,7 +246,9 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, setView }
                                         <p className="text-xs text-slate-400 mt-1">{notif.time}</p>
                                     </div>
                                 </div>
-                            ))}
+                            )) : (
+                                <div className="p-4 text-center text-xs text-slate-400">No notifications</div>
+                            )}
                         </div>
                         <div className="p-2 text-center bg-slate-50 dark:bg-slate-700/30">
                             <button className="text-xs font-medium text-slate-500 hover:text-brand-600 dark:hover:text-brand-400 transition-colors">View All</button>
@@ -571,9 +593,9 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, setView }
                     {calendarDays.map((d, index) => (
                         <button 
                             key={index}
-                            onClick={() => setSelectedDay(d.date)}
+                            onClick={() => setSelectedDate(d.fullDate)}
                             className={`flex flex-col items-center p-2 rounded-lg transition-all ${
-                                selectedDay === d.date 
+                                selectedDate === d.fullDate 
                                 ? 'bg-teal-600 text-white shadow-md transform scale-105' 
                                 : 'text-slate-400 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-600 hover:shadow-sm'
                             }`}
@@ -585,7 +607,7 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, setView }
                 </div>
 
                 <div className="space-y-4">
-                    {filteredAppointments.map(appt => (
+                    {filteredAppointments.length > 0 ? filteredAppointments.map(appt => (
                          <div key={appt.id} className="flex items-center gap-3 p-3 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl transition-colors cursor-pointer group">
                              <img src={`https://i.pravatar.cc/150?u=${appt.patientId}`} className="w-10 h-10 rounded-full bg-slate-200" alt="patient" />
                              <div className="flex-1">
@@ -594,9 +616,8 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, setView }
                              </div>
                              <span className="text-[10px] font-bold text-slate-300 bg-slate-100 dark:bg-slate-700 dark:text-slate-400 px-2 py-1 rounded">Offline</span>
                          </div>
-                    ))}
-                    {filteredAppointments.length === 0 && (
-                        <div className="text-center py-4 text-slate-400 text-xs">No appointments for this day.</div>
+                    )) : (
+                         <div className="text-center py-4 text-slate-400 text-xs">No appointments for this day.</div>
                     )}
                 </div>
             </div>

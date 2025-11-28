@@ -47,4 +47,20 @@ export interface ChatMessage {
   timestamp: Date;
 }
 
+export interface ClinicSettings {
+  name: string;
+  phone: string;
+  email: string;
+  location: string;
+  currency: string;
+  language: string;
+  smsEnabled: boolean;
+}
+
+export interface Notification {
+  id: string;
+  message: string;
+  type: 'success' | 'error' | 'info';
+}
+
 export type ViewState = 'dashboard' | 'patients' | 'appointments' | 'pharmacy' | 'reports' | 'settings' | 'profile';
