@@ -32,13 +32,36 @@ export interface Appointment {
   status: 'Scheduled' | 'Completed' | 'Cancelled';
 }
 
+export interface Supplier {
+  id: string;
+  name: string;
+  contactPerson: string;
+  phone: string;
+  email: string;
+}
+
 export interface InventoryItem {
   id: string;
   name: string;
   stock: number;
+  minStockLevel: number; // Reorder point
   unit: string;
-  category: 'Medicine' | 'Supply' | 'Lab';
+  category: 'Medicine' | 'Supply' | 'Lab' | 'Equipment';
   price: number;
+  batchNumber?: string;
+  expiryDate?: string;
+  supplierId?: string;
+}
+
+export interface InventoryLog {
+  id: string;
+  itemId: string;
+  itemName: string;
+  action: 'Created' | 'Updated' | 'Restocked' | 'Deleted' | 'Dispensed';
+  quantityChange?: number;
+  notes: string;
+  timestamp: string;
+  user: string;
 }
 
 export interface ChatMessage {
@@ -68,7 +91,7 @@ export interface BillingInfo {
   };
 }
 
-export type Role = 'Admin' | 'Doctor' | 'Nurse' | 'Receptionist';
+export type Role = 'Admin' | 'Doctor' | 'Nurse' | 'Receptionist' | 'Lab Tech' | 'Pharmacist';
 
 export interface TeamMember {
   id: string;
@@ -105,4 +128,91 @@ export interface Notification {
   type: 'success' | 'error' | 'info';
 }
 
-export type ViewState = 'dashboard' | 'patients' | 'appointments' | 'pharmacy' | 'reports' | 'settings' | 'profile' | 'bulk-sms';
+// -- NEW: Patient Flow Types --
+
+// Updated Workflow: Check-In -> Vitals (Optional) -> Consultation -> Lab -> Billing -> Pharmacy -> Clearance -> Completed
+export type VisitStage = 'Check-In' | 'Vitals' | 'Consultation' | 'Lab' | 'Billing' | 'Pharmacy' | 'Clearance' | 'Completed';
+export type VisitPriority = 'Normal' | 'Urgent' | 'Emergency';
+
+export interface PrescriptionItem {
+  inventoryId: string;
+  name: string;
+  dosage: string; // e.g., "1x3 for 5 days"
+  quantity: number;
+  price: number;
+}
+
+export interface LabTestProfile {
+  id: string;
+  name: string;
+  price: number;
+  category: 'Hematology' | 'Microbiology' | 'Biochemistry' | 'Radiology';
+}
+
+export interface LabOrder {
+  id: string;
+  testId: string;
+  testName: string;
+  status: 'Pending' | 'Completed';
+  result?: string;
+  notes?: string;
+  price: number;
+  orderedAt: string;
+  completedAt?: string;
+}
+
+export interface Visit {
+  id: string;
+  patientId: string;
+  patientName: string;
+  stage: VisitStage;
+  stageStartTime: string; // ISO String to track wait times
+  startTime: string; // ISO String
+  queueNumber: number;
+  priority: VisitPriority;
+  
+  // Insurance
+  insuranceDetails?: {
+    provider: string;
+    memberNumber: string;
+  };
+
+  // Vitals Data (formerly Triage)
+  vitals?: {
+    bp: string;
+    temp: string;
+    weight: string;
+    heartRate: string;
+    spo2?: string;
+  };
+  
+  // Doctor Data
+  chiefComplaint?: string;
+  diagnosis?: string;
+  doctorNotes?: string;
+  
+  // Orders
+  labOrders: LabOrder[];
+  prescription: PrescriptionItem[];
+  medicationsDispensed: boolean;
+  
+  // Billing Data
+  consultationFee: number;
+  totalBill: number;
+  paymentStatus: 'Pending' | 'Paid';
+}
+
+export type ViewState = 
+  | 'dashboard' 
+  | 'reception'   // Reception Dashboard
+  | 'triage'      // Nurse Dashboard
+  | 'consultation'// Doctor Dashboard
+  | 'lab-work'    // Lab Dashboard
+  | 'billing-desk'// Billing Dashboard
+  | 'patients' 
+  | 'appointments' 
+  | 'pharmacy' 
+  | 'reports' 
+  | 'settings' 
+  | 'profile' 
+  | 'bulk-sms';

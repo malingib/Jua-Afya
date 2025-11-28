@@ -1,4 +1,8 @@
-import { Patient, Appointment, InventoryItem, Gender } from './types';
+
+
+
+
+import { Patient, Appointment, InventoryItem, Gender, Supplier, InventoryLog, Visit, LabTestProfile } from './types';
 
 export const MOCK_PATIENTS: Patient[] = [
   {
@@ -57,10 +61,66 @@ export const MOCK_APPOINTMENTS: Appointment[] = [
   { id: 'A003', patientId: 'P002', patientName: 'Juma Ochieng', date: '2023-10-28', time: '14:00', reason: 'Cast Removal', status: 'Scheduled' },
 ];
 
+export const MOCK_SUPPLIERS: Supplier[] = [
+  { id: 'S001', name: 'MedKenya Distributors', contactPerson: 'John K.', phone: '+254 700 000 001', email: 'orders@medkenya.com' },
+  { id: 'S002', name: 'Nairobi Pharma Ltd', contactPerson: 'Sarah M.', phone: '+254 700 000 002', email: 'sales@nbi-pharma.co.ke' },
+  { id: 'S003', name: 'Global Health Supplies', contactPerson: 'David O.', phone: '+254 700 000 003', email: 'david@globalhealth.com' },
+];
+
 export const MOCK_INVENTORY: InventoryItem[] = [
-  { id: 'I001', name: 'Paracetamol 500mg', stock: 1500, unit: 'Tablets', category: 'Medicine', price: 5 },
-  { id: 'I002', name: 'Amoxicillin 250mg', stock: 400, unit: 'Tablets', category: 'Medicine', price: 15 },
-  { id: 'I003', name: 'Cotton Wool', stock: 12, unit: 'Rolls', category: 'Supply', price: 150 },
-  { id: 'I004', name: 'Malaria Test Kit', stock: 45, unit: 'Kits', category: 'Lab', price: 200 },
-  { id: 'I005', name: 'Cough Syrup', stock: 8, unit: 'Bottles', category: 'Medicine', price: 350 }, // Low stock
+  { id: 'I001', name: 'Paracetamol 500mg', stock: 1500, minStockLevel: 500, unit: 'Tablets', category: 'Medicine', price: 5, batchNumber: 'B-9923', expiryDate: '2025-12-31', supplierId: 'S001' },
+  { id: 'I002', name: 'Amoxicillin 250mg', stock: 400, minStockLevel: 200, unit: 'Tablets', category: 'Medicine', price: 15, batchNumber: 'AMX-001', expiryDate: '2024-06-30', supplierId: 'S002' },
+  { id: 'I003', name: 'Cotton Wool', stock: 12, minStockLevel: 20, unit: 'Rolls', category: 'Supply', price: 150, supplierId: 'S003' },
+  { id: 'I004', name: 'Malaria Test Kit', stock: 45, minStockLevel: 50, unit: 'Kits', category: 'Lab', price: 200, batchNumber: 'MAL-22', expiryDate: '2023-12-01', supplierId: 'S001' }, // Expiring soon
+  { id: 'I005', name: 'Cough Syrup', stock: 8, minStockLevel: 20, unit: 'Bottles', category: 'Medicine', price: 350, batchNumber: 'CS-88', expiryDate: '2025-01-01', supplierId: 'S002' }, // Low stock
+];
+
+export const MOCK_LAB_TESTS: LabTestProfile[] = [
+    { id: 'T001', name: 'Full Hemogram (CBC)', price: 800, category: 'Hematology' },
+    { id: 'T002', name: 'Malaria Smear', price: 300, category: 'Microbiology' },
+    { id: 'T003', name: 'Urinalysis', price: 400, category: 'Microbiology' },
+    { id: 'T004', name: 'Random Blood Sugar', price: 200, category: 'Biochemistry' },
+    { id: 'T005', name: 'Lipid Profile', price: 1500, category: 'Biochemistry' },
+    { id: 'T006', name: 'X-Ray (Chest)', price: 1200, category: 'Radiology' },
+];
+
+export const MOCK_LOGS: InventoryLog[] = [
+  { id: 'L001', itemId: 'I001', itemName: 'Paracetamol 500mg', action: 'Restocked', quantityChange: 1000, notes: 'Monthly restock', timestamp: '2023-10-01T09:00:00Z', user: 'Dr. Andrew' },
+  { id: 'L002', itemId: 'I005', itemName: 'Cough Syrup', action: 'Dispensed', quantityChange: -2, notes: 'Prescription #882', timestamp: '2023-10-24T14:30:00Z', user: 'Nurse Sarah' },
+];
+
+export const MOCK_VISITS: Visit[] = [
+  { 
+    id: 'V100', 
+    patientId: 'P001', 
+    patientName: 'Wanjiku Kamau', 
+    stage: 'Consultation', 
+    stageStartTime: new Date(Date.now() - 1000 * 60 * 15).toISOString(), // 15 mins ago
+    startTime: new Date(Date.now() - 1000 * 60 * 45).toISOString(), // 45 mins ago
+    queueNumber: 1, 
+    priority: 'Normal',
+    vitals: { bp: '130/85', temp: '37.2', weight: '68', heartRate: '80' },
+    labOrders: [],
+    prescription: [],
+    medicationsDispensed: false,
+    consultationFee: 500,
+    totalBill: 500,
+    paymentStatus: 'Pending'
+  },
+  { 
+    id: 'V101', 
+    patientId: 'P003', 
+    patientName: 'Amina Mohamed', 
+    stage: 'Vitals', // Updated from Triage
+    stageStartTime: new Date(Date.now() - 1000 * 60 * 5).toISOString(), // 5 mins ago
+    startTime: new Date(Date.now() - 1000 * 60 * 10).toISOString(),
+    queueNumber: 2, 
+    priority: 'Urgent',
+    labOrders: [],
+    prescription: [],
+    medicationsDispensed: false,
+    consultationFee: 500,
+    totalBill: 500,
+    paymentStatus: 'Pending'
+  }
 ];

@@ -10,8 +10,9 @@ import Settings from './components/Settings';
 import Profile from './components/Profile';
 import ChatBot from './components/ChatBot';
 import BulkSMS from './components/BulkSMS';
-import { ViewState, Patient, Appointment, InventoryItem, ClinicSettings, Notification } from './types';
-import { MOCK_PATIENTS, MOCK_APPOINTMENTS, MOCK_INVENTORY } from './constants';
+import PatientQueue from './components/PatientQueue';
+import { ViewState, Patient, Appointment, InventoryItem, ClinicSettings, Notification, Supplier, InventoryLog, Visit, VisitPriority, TeamMember } from './types';
+import { MOCK_PATIENTS, MOCK_APPOINTMENTS, MOCK_INVENTORY, MOCK_SUPPLIERS, MOCK_LOGS, MOCK_VISITS } from './constants';
 import { CheckCircle, AlertCircle, X } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -65,6 +66,10 @@ const App: React.FC = () => {
   const [patients, setPatients] = usePersistedState<Patient[]>('patients', MOCK_PATIENTS);
   const [appointments, setAppointments] = usePersistedState<Appointment[]>('appointments', MOCK_APPOINTMENTS);
   const [inventory, setInventory] = usePersistedState<InventoryItem[]>('inventory', MOCK_INVENTORY);
+  const [suppliers, setSuppliers] = usePersistedState<Supplier[]>('suppliers', MOCK_SUPPLIERS);
+  const [inventoryLogs, setInventoryLogs] = usePersistedState<InventoryLog[]>('inventoryLogs', MOCK_LOGS);
+  const [visits, setVisits] = usePersistedState<Visit[]>('visits', MOCK_VISITS);
+  
   const [settings, setSettings] = usePersistedState<ClinicSettings>('clinicSettings', {
       name: 'JuaAfya Medical Centre',
       phone: '+254 712 345 678',
@@ -100,11 +105,23 @@ const App: React.FC = () => {
       team: [
         { id: '1', name: 'Dr. Andrew Kimani', email: 'andrew@juaafya.com', role: 'Admin', status: 'Active', lastActive: 'Now', avatar: 'https://i.pravatar.cc/150?img=11' },
         { id: '2', name: 'Sarah Wanjiku', email: 'sarah@juaafya.com', role: 'Nurse', status: 'Active', lastActive: '2h ago', avatar: 'https://i.pravatar.cc/150?img=5' },
+        { id: '3', name: 'John Omondi', email: 'john@juaafya.com', role: 'Doctor', status: 'Active', lastActive: '5m ago', avatar: 'https://i.pravatar.cc/150?img=12' },
+        { id: '4', name: 'Grace M.', email: 'grace@juaafya.com', role: 'Receptionist', status: 'Active', lastActive: 'Now', avatar: 'https://i.pravatar.cc/150?img=9' },
+        { id: '5', name: 'Peter K.', email: 'peter@juaafya.com', role: 'Lab Tech', status: 'Active', lastActive: '10m ago', avatar: 'https://i.pravatar.cc/150?img=8' },
       ]
   });
 
-  // Calculate Global Low Stock Count
-  const lowStockCount = inventory.filter(i => i.stock < 10).length;
+  // -- User Session State (Simulated) --
+  const [currentUser, setCurrentUser] = useState<TeamMember>(settings.team[0]);
+
+  const switchUser = (member: TeamMember) => {
+      setCurrentUser(member);
+      setCurrentView('dashboard'); // Reset view on switch
+      showToast(`Switched to ${member.name} (${member.role})`);
+  };
+
+  // Calculate Global Low Stock Count (using minStockLevel from item)
+  const lowStockCount = inventory.filter(i => i.stock <= i.minStockLevel).length;
 
   // -- Toast Notification System --
   const [toasts, setToasts] = useState<Notification[]>([]);
@@ -134,19 +151,68 @@ const App: React.FC = () => {
     showToast(`Patient deleted.`, 'info');
   };
 
+  // -- Inventory Handlers --
+  const logInventoryAction = (item: InventoryItem, action: InventoryLog['action'], quantityChange: number, notes: string) => {
+      const log: InventoryLog = {
+          id: `LOG-${Date.now()}`,
+          itemId: item.id,
+          itemName: item.name,
+          action,
+          quantityChange,
+          notes,
+          timestamp: new Date().toISOString(),
+          user: currentUser.name // Use actual logged in user
+      };
+      setInventoryLogs(prev => [log, ...prev]);
+  };
+
   const addInventoryItem = (item: InventoryItem) => {
     setInventory(prev => [item, ...prev]);
+    logInventoryAction(item, 'Created', item.stock, 'Initial stock entry');
     showToast(`${item.name} added to inventory.`);
   };
 
-  const updateInventoryItem = (updatedItem: InventoryItem) => {
+  const updateInventoryItem = (updatedItem: InventoryItem, reason = 'Updated details') => {
       setInventory(prev => prev.map(i => i.id === updatedItem.id ? updatedItem : i));
+      
+      // Calculate diff for logging if it's a stock change
+      const oldItem = inventory.find(i => i.id === updatedItem.id);
+      const stockDiff = updatedItem.stock - (oldItem?.stock || 0);
+      
+      if (stockDiff !== 0) {
+          logInventoryAction(updatedItem, stockDiff > 0 ? 'Restocked' : 'Dispensed', stockDiff, reason);
+      } else {
+          logInventoryAction(updatedItem, 'Updated', 0, reason);
+      }
+      
       showToast(`${updatedItem.name} updated.`);
   };
 
   const deleteInventoryItem = (id: string) => {
+      const item = inventory.find(i => i.id === id);
+      if (item) {
+          logInventoryAction(item, 'Deleted', -item.stock, 'Item removed from system');
+      }
       setInventory(prev => prev.filter(i => i.id !== id));
       showToast(`Item removed from inventory.`, 'info');
+  };
+
+  // -- Supplier Handlers --
+  const addSupplier = (supplier: Supplier) => {
+      setSuppliers(prev => [...prev, supplier]);
+      showToast('Supplier added successfully.');
+  };
+
+  const updateSupplier = (updated: Supplier) => {
+      setSuppliers(prev => prev.map(s => s.id === updated.id ? updated : s));
+      showToast('Supplier updated.');
+  };
+
+  const deleteSupplier = (id: string) => {
+      setSuppliers(prev => prev.filter(s => s.id !== id));
+      // Also clear supplierId from items linked to this supplier
+      setInventory(prev => prev.map(item => item.supplierId === id ? { ...item, supplierId: undefined } : item));
+      showToast('Supplier removed.', 'info');
   };
 
   const addAppointment = (newAppt: Appointment) => {
@@ -156,8 +222,6 @@ const App: React.FC = () => {
 
   const updateAppointment = (updatedAppt: Appointment) => {
     setAppointments(prev => prev.map(a => a.id === updatedAppt.id ? updatedAppt : a));
-    // Don't show toast for every status change if you prefer, but good for feedback
-    // showToast(`Appointment updated.`); 
   };
 
   const updateSettings = (newSettings: ClinicSettings) => {
@@ -165,16 +229,105 @@ const App: React.FC = () => {
       showToast('Settings saved successfully!');
   };
 
+  // -- Visit/Queue Handlers --
+  const addVisit = (patientId: string, priority: VisitPriority = 'Normal', insurance?: any, skipVitals: boolean = false) => {
+    const patient = patients.find(p => p.id === patientId);
+    if (!patient) return;
+
+    const newVisit: Visit = {
+      id: `V${Date.now()}`,
+      patientId: patient.id,
+      patientName: patient.name,
+      stage: skipVitals ? 'Consultation' : 'Vitals', // Skip Vitals logic
+      stageStartTime: new Date().toISOString(),
+      startTime: new Date().toISOString(),
+      queueNumber: visits.filter(v => v.stage !== 'Completed').length + 1,
+      priority: priority,
+      insuranceDetails: insurance,
+      labOrders: [],
+      prescription: [],
+      medicationsDispensed: false,
+      consultationFee: 500, // Default fee
+      totalBill: 500,
+      paymentStatus: 'Pending'
+    };
+    
+    setVisits(prev => [...prev, newVisit]);
+    showToast(`${patient.name} checked in (Priority: ${priority}).`);
+  };
+
+  const updateVisit = (updatedVisit: Visit) => {
+    setVisits(prev => prev.map(v => v.id === updatedVisit.id ? updatedVisit : v));
+  };
+
+  const dispensePrescription = (visit: Visit) => {
+      // 1. Update inventory
+      const updatedInventory = [...inventory];
+      visit.prescription.forEach(med => {
+          const itemIndex = updatedInventory.findIndex(i => i.id === med.inventoryId);
+          if (itemIndex > -1) {
+              const item = updatedInventory[itemIndex];
+              const newStock = Math.max(0, item.stock - med.quantity);
+              updatedInventory[itemIndex] = { ...item, stock: newStock };
+              
+              // Log it
+              logInventoryAction(item, 'Dispensed', -med.quantity, `Prescription for ${visit.patientName}`);
+          }
+      });
+      setInventory(updatedInventory);
+
+      // 2. Move visit to Clearance (Patient has already paid in Billing)
+      updateVisit({ ...visit, medicationsDispensed: true, stage: 'Clearance', stageStartTime: new Date().toISOString() });
+      showToast('Medications dispensed. Sent to Clearance.');
+  };
+
   const renderContent = () => {
+    // Shared Props
+    const queueProps = {
+        visits,
+        patients,
+        inventory,
+        addVisit,
+        updateVisit
+    };
+
     switch (currentView) {
       case 'dashboard':
         return <Dashboard appointments={appointments} inventory={inventory} patients={patients} setView={setCurrentView} />;
+      
+      // -- DEPARTMENTAL VIEWS --
+      case 'reception':
+        return <PatientQueue {...queueProps} restrictedStages={['Check-In', 'Clearance']} />;
+      case 'triage':
+        return <PatientQueue {...queueProps} restrictedStages={['Vitals']} />;
+      case 'consultation':
+        return <PatientQueue {...queueProps} restrictedStages={['Consultation']} />;
+      case 'lab-work':
+        return <PatientQueue {...queueProps} restrictedStages={['Lab']} />;
+      case 'billing-desk':
+        return <PatientQueue {...queueProps} restrictedStages={['Billing']} />;
+      
+      // -- GENERAL MANAGEMENT --
       case 'patients':
         return <PatientList patients={patients} addPatient={addPatient} updatePatient={updatePatient} deletePatient={deletePatient} />;
       case 'appointments':
         return <Appointments appointments={appointments} patients={patients} addAppointment={addAppointment} updateAppointment={updateAppointment} showToast={showToast} />;
       case 'pharmacy':
-        return <Pharmacy inventory={inventory} addInventoryItem={addInventoryItem} updateInventoryItem={updateInventoryItem} deleteInventoryItem={deleteInventoryItem} />;
+        return (
+            <Pharmacy 
+                inventory={inventory} 
+                suppliers={suppliers}
+                logs={inventoryLogs}
+                visits={visits}
+                onDispense={dispensePrescription}
+                addInventoryItem={addInventoryItem} 
+                updateInventoryItem={updateInventoryItem} 
+                deleteInventoryItem={deleteInventoryItem}
+                addSupplier={addSupplier}
+                updateSupplier={updateSupplier}
+                deleteSupplier={deleteSupplier}
+            />
+        );
       case 'bulk-sms':
         return <BulkSMS patients={patients} showToast={showToast} />;
       case 'reports':
@@ -184,22 +337,30 @@ const App: React.FC = () => {
       case 'profile':
         return <Profile />;
       default:
-        return <Dashboard appointments={appointments} inventory={inventory} patients={patients} setView={setCurrentView} />;
+        // Default catch-all (Admin Queue view)
+        return <PatientQueue {...queueProps} />;
     }
   };
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex transition-colors duration-200 font-sans">
       {/* Navigation */}
-      <Sidebar currentView={currentView} setView={setCurrentView} lowStockCount={lowStockCount} />
+      <Sidebar 
+        currentView={currentView} 
+        setView={setCurrentView} 
+        lowStockCount={lowStockCount} 
+        currentUser={currentUser}
+        switchUser={switchUser}
+        team={settings.team}
+      />
 
       {/* Main Content Area */}
-      <main className="flex-1 md:ml-72 w-full transition-all duration-300">
+      <main className="flex-1 md:ml-64 lg:ml-72 w-full transition-all duration-300">
         {/* Mobile Header */}
         <div className="md:hidden bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 sticky top-0 z-10 flex items-center justify-between no-print">
            <h1 className="font-bold text-lg text-slate-800 dark:text-white">Jua<span className="text-brand-500">Afya</span></h1>
            <div className="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center text-brand-600 font-bold text-xs">
-              DK
+              {currentUser.name.substring(0,2)}
            </div>
         </div>
 

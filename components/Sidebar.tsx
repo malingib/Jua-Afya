@@ -1,29 +1,47 @@
 
-import React from 'react';
-import { ViewState } from '../types';
-import { LayoutDashboard, Users, Calendar, Pill, Settings, LogOut, HelpCircle, Activity, MessageSquare } from 'lucide-react';
+import React, { useState } from 'react';
+import { ViewState, TeamMember, Role } from '../types';
+import { LayoutDashboard, Users, Calendar, Pill, Settings, LogOut, HelpCircle, Activity, MessageSquare, ClipboardList, Stethoscope, TestTube, CreditCard, UserCircle } from 'lucide-react';
 
 interface SidebarProps {
   currentView: ViewState;
   setView: (view: ViewState) => void;
   lowStockCount?: number;
+  currentUser: TeamMember;
+  switchUser: (member: TeamMember) => void;
+  team: TeamMember[];
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, lowStockCount = 0 }) => {
-  const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'patients', label: 'Patient', icon: Users },
-    { id: 'appointments', label: 'Appointment', icon: Calendar },
-    { id: 'pharmacy', label: 'Pharmacy', icon: Pill },
-    { id: 'bulk-sms', label: 'Broadcast', icon: MessageSquare },
-    { id: 'reports', label: 'Report', icon: Activity },
-    { id: 'settings', label: 'Setting', icon: Settings },
+const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, lowStockCount = 0, currentUser, switchUser, team }) => {
+  const [showUserMenu, setShowUserMenu] = useState(false);
+
+  // Define all possible navigation items
+  const allNavItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['Admin', 'Doctor', 'Nurse', 'Receptionist', 'Pharmacist', 'Lab Tech'] },
+    
+    // Departmental Views
+    { id: 'reception', label: 'Reception Desk', icon: ClipboardList, roles: ['Admin', 'Receptionist'] },
+    { id: 'triage', label: 'Triage / Vitals', icon: Activity, roles: ['Admin', 'Nurse'] },
+    { id: 'consultation', label: 'Consultations', icon: Stethoscope, roles: ['Admin', 'Doctor'] },
+    { id: 'lab-work', label: 'Laboratory', icon: TestTube, roles: ['Admin', 'Lab Tech', 'Doctor'] },
+    { id: 'billing-desk', label: 'Billing', icon: CreditCard, roles: ['Admin', 'Receptionist', 'Accountant'] },
+    { id: 'pharmacy', label: 'Pharmacy', icon: Pill, roles: ['Admin', 'Pharmacist', 'Doctor'] },
+
+    // General Management
+    { id: 'patients', label: 'Patients', icon: Users, roles: ['Admin', 'Doctor', 'Nurse', 'Receptionist'] },
+    { id: 'appointments', label: 'Appointments', icon: Calendar, roles: ['Admin', 'Doctor', 'Nurse', 'Receptionist'] },
+    { id: 'bulk-sms', label: 'Broadcast', icon: MessageSquare, roles: ['Admin', 'Receptionist'] },
+    { id: 'reports', label: 'Reports', icon: Activity, roles: ['Admin', 'Doctor'] },
+    { id: 'settings', label: 'Settings', icon: Settings, roles: ['Admin'] },
   ];
+
+  // Filter items based on current user role
+  const navItems = allNavItems.filter(item => item.roles.includes(currentUser.role));
 
   return (
     <>
-      {/* Desktop Sidebar - Floating with rounded corners */}
-      <div className="hidden md:flex flex-col w-64 bg-sidebar text-white fixed left-4 top-4 bottom-4 rounded-3xl z-20 shadow-2xl overflow-hidden no-print">
+      {/* Desktop Sidebar */}
+      <div className="hidden md:flex flex-col w-64 bg-sidebar text-white fixed left-4 top-4 bottom-4 rounded-3xl z-20 shadow-2xl overflow-hidden no-print transition-all duration-300">
         {/* Logo Area */}
         <div className="p-8 flex items-center space-x-3 mb-2">
             <div className="relative">
@@ -65,20 +83,42 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, lowStockCount =
           ))}
         </nav>
 
-        {/* Bottom Actions */}
-        <div className="p-6 space-y-2 mt-auto">
-           <button
-              className="flex items-center w-full px-6 py-3 text-slate-400 hover:text-white transition-colors rounded-xl hover:bg-white/5"
-            >
-            <HelpCircle className="w-5 h-5 mr-4" />
-            <span className="text-base">Help & Center</span>
-          </button>
-           <button
-              className="flex items-center w-full px-6 py-3 text-slate-400 hover:text-white transition-colors rounded-xl hover:bg-white/5"
-            >
-            <LogOut className="w-5 h-5 mr-4" />
-            <span className="text-base">Logout</span>
-          </button>
+        {/* User / Role Switcher (Simulated Auth) */}
+        <div className="p-4 mt-auto">
+             <div className="relative">
+                 <button 
+                    onClick={() => setShowUserMenu(!showUserMenu)}
+                    className="flex items-center w-full p-3 rounded-xl bg-black/20 hover:bg-black/30 transition-colors border border-white/5"
+                 >
+                     <img src={currentUser.avatar} alt="Avatar" className="w-10 h-10 rounded-full border-2 border-green-500/50" />
+                     <div className="ml-3 text-left overflow-hidden">
+                         <p className="text-sm font-bold text-white truncate">{currentUser.name}</p>
+                         <p className="text-xs text-green-400 font-medium truncate">{currentUser.role}</p>
+                     </div>
+                     <Settings className="w-4 h-4 text-slate-400 ml-auto" />
+                 </button>
+
+                 {showUserMenu && (
+                     <div className="absolute bottom-full left-0 w-full mb-2 bg-white text-slate-800 rounded-xl shadow-xl overflow-hidden animate-in slide-in-from-bottom-2">
+                         <div className="p-2 bg-slate-50 border-b border-slate-100 text-xs font-bold text-slate-500 uppercase">Switch Role</div>
+                         <div className="max-h-48 overflow-y-auto">
+                            {team.map(member => (
+                                <button
+                                    key={member.id}
+                                    onClick={() => { switchUser(member); setShowUserMenu(false); }}
+                                    className={`w-full flex items-center p-3 hover:bg-slate-50 transition-colors ${currentUser.id === member.id ? 'bg-green-50' : ''}`}
+                                >
+                                    <div className="w-2 h-2 rounded-full mr-3 bg-slate-300" style={{ backgroundColor: currentUser.id === member.id ? '#10b981' : undefined }}></div>
+                                    <div className="text-left">
+                                        <p className="text-sm font-bold">{member.name}</p>
+                                        <p className="text-xs text-slate-500">{member.role}</p>
+                                    </div>
+                                </button>
+                            ))}
+                         </div>
+                     </div>
+                 )}
+             </div>
         </div>
       </div>
 

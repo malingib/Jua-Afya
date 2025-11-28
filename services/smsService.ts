@@ -1,7 +1,8 @@
+
 // Mobiwave SMS Integration Service
 
 // API Configuration from documentation
-const API_TOKEN = '29|tV2YhbU49xBNHQPM4xldeJy0y4bi5Heyd8yyAmgw';
+const API_TOKEN = process.env.SMS_API_KEY || '';
 const BASE_URL = 'https://sms.mobiwave.co.ke/api/v3';
 const DEFAULT_SENDER_ID = 'MOBIWAVE'; // Alphanumeric sender ID
 
@@ -17,6 +18,11 @@ export interface SmsResponse {
  * @param message Text message content
  */
 export const sendSms = async (recipient: string, message: string): Promise<SmsResponse> => {
+  if (!API_TOKEN) {
+    console.warn("SMS_API_KEY is missing. SMS functionality will be simulated or fail.");
+    return { status: 'error', message: 'SMS configuration missing (API Key).' };
+  }
+
   // 1. Format recipient: Mobiwave usually expects digits (e.g. 254712345678)
   // We strip non-digit characters.
   const cleanRecipient = recipient.replace(/[^0-9]/g, '');
