@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Chat } from "@google/genai";
 
 const apiKey = process.env.API_KEY || '';
@@ -52,6 +53,30 @@ export const draftAppointmentSms = async (patientName: string, date: string, rea
     return `Hello ${patientName}, reminder for your appointment on ${date}. - JuaAfya Clinic`;
   }
 };
+
+/**
+ * Generates marketing or general broadcast SMS content.
+ * Uses gemini-2.5-flash.
+ */
+export const draftCampaignMessage = async (topic: string, tone: string): Promise<string> => {
+    if (!apiKey) return "API Key missing.";
+  
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `Draft a short, engaging SMS broadcast (max 160 chars) for a health clinic in Kenya.
+        Topic: "${topic}"
+        Tone: ${tone} (e.g., Professional, Urgent, Friendly, Educational).
+        Target Audience: Patients.
+        Language: English (can use common Kenyan phrases if appropriate).
+        Call to action: Visit JuaAfya Clinic or call +254712345678.
+        Do not use placeholders.`,
+      });
+      return response.text?.trim().replace(/^"|"$/g, '') || "Could not draft campaign.";
+    } catch (error) {
+      return `Health Alert: ${topic}. Visit JuaAfya Clinic for more info.`;
+    }
+  };
 
 /**
  * Generates a daily executive summary for the doctor based on stats.

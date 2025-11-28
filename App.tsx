@@ -9,6 +9,7 @@ import Reports from './components/Reports';
 import Settings from './components/Settings';
 import Profile from './components/Profile';
 import ChatBot from './components/ChatBot';
+import BulkSMS from './components/BulkSMS';
 import { ViewState, Patient, Appointment, InventoryItem, ClinicSettings, Notification } from './types';
 import { MOCK_PATIENTS, MOCK_APPOINTMENTS, MOCK_INVENTORY } from './constants';
 import { CheckCircle, AlertCircle, X } from 'lucide-react';
@@ -174,6 +175,8 @@ const App: React.FC = () => {
         return <Appointments appointments={appointments} patients={patients} addAppointment={addAppointment} updateAppointment={updateAppointment} showToast={showToast} />;
       case 'pharmacy':
         return <Pharmacy inventory={inventory} addInventoryItem={addInventoryItem} updateInventoryItem={updateInventoryItem} deleteInventoryItem={deleteInventoryItem} />;
+      case 'bulk-sms':
+        return <BulkSMS patients={patients} showToast={showToast} />;
       case 'reports':
         return <Reports />;
       case 'settings':

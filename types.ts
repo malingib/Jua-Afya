@@ -105,4 +105,4 @@ export interface Notification {
   type: 'success' | 'error' | 'info';
 }
 
-export type ViewState = 'dashboard' | 'patients' | 'appointments' | 'pharmacy' | 'reports' | 'settings' | 'profile';
+export type ViewState = 'dashboard' | 'patients' | 'appointments' | 'pharmacy' | 'reports' | 'settings' | 'profile' | 'bulk-sms';

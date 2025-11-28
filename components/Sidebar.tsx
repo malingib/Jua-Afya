@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { ViewState } from '../types';
-import { LayoutDashboard, Users, Calendar, Pill, Settings, LogOut, HelpCircle, Activity } from 'lucide-react';
+import { LayoutDashboard, Users, Calendar, Pill, Settings, LogOut, HelpCircle, Activity, MessageSquare } from 'lucide-react';
 
 interface SidebarProps {
   currentView: ViewState;
@@ -15,6 +15,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, lowStockCount =
     { id: 'patients', label: 'Patient', icon: Users },
     { id: 'appointments', label: 'Appointment', icon: Calendar },
     { id: 'pharmacy', label: 'Pharmacy', icon: Pill },
+    { id: 'bulk-sms', label: 'Broadcast', icon: MessageSquare },
     { id: 'reports', label: 'Report', icon: Activity },
     { id: 'settings', label: 'Setting', icon: Settings },
   ];
