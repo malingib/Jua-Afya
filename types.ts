@@ -1,3 +1,4 @@
+
 export enum Gender {
   Male = 'Male',
   Female = 'Female',
@@ -47,14 +48,55 @@ export interface ChatMessage {
   timestamp: Date;
 }
 
+export interface NotificationPreferences {
+  appointmentReminders: boolean;
+  lowStockAlerts: boolean;
+  dailyReports: boolean;
+  marketingEmails: boolean;
+  alertEmail: string;
+}
+
+export interface BillingInfo {
+  plan: 'Free' | 'Pro' | 'Enterprise';
+  status: 'Active' | 'Past Due';
+  nextBillingDate: string;
+  paymentMethod: {
+    type: 'Card' | 'M-Pesa';
+    last4: string; // or phone number suffix
+    brand: string;
+    expiry?: string;
+  };
+}
+
+export type Role = 'Admin' | 'Doctor' | 'Nurse' | 'Receptionist';
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  status: 'Active' | 'Invited' | 'Deactivated';
+  lastActive: string;
+  avatar?: string;
+}
+
 export interface ClinicSettings {
   name: string;
   phone: string;
   email: string;
+  logo?: string;
   location: string;
   currency: string;
   language: string;
-  smsEnabled: boolean;
+  timezone: string;
+  smsEnabled: boolean; // Legacy simplified toggle
+  notifications: NotificationPreferences;
+  security: {
+    twoFactorEnabled: boolean;
+    lastPasswordChange: string;
+  };
+  billing: BillingInfo;
+  team: TeamMember[];
 }
 
 export interface Notification {

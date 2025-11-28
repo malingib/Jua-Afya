@@ -71,7 +71,35 @@ const App: React.FC = () => {
       location: 'Nairobi, Kenya',
       currency: 'KSh',
       language: 'English',
-      smsEnabled: true
+      timezone: 'EAT (GMT+3)',
+      smsEnabled: true,
+      logo: '',
+      notifications: {
+          appointmentReminders: true,
+          lowStockAlerts: true,
+          dailyReports: false,
+          marketingEmails: false,
+          alertEmail: 'admin@juaafya.com'
+      },
+      security: {
+          twoFactorEnabled: false,
+          lastPasswordChange: '2023-09-15'
+      },
+      billing: {
+          plan: 'Pro',
+          status: 'Active',
+          nextBillingDate: '2023-11-01',
+          paymentMethod: {
+              type: 'Card',
+              last4: '4242',
+              brand: 'Visa',
+              expiry: '12/25'
+          }
+      },
+      team: [
+        { id: '1', name: 'Dr. Andrew Kimani', email: 'andrew@juaafya.com', role: 'Admin', status: 'Active', lastActive: 'Now', avatar: 'https://i.pravatar.cc/150?img=11' },
+        { id: '2', name: 'Sarah Wanjiku', email: 'sarah@juaafya.com', role: 'Nurse', status: 'Active', lastActive: '2h ago', avatar: 'https://i.pravatar.cc/150?img=5' },
+      ]
   });
 
   // Calculate Global Low Stock Count
