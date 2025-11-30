@@ -108,6 +108,52 @@ export const generateDailyBriefing = async (
 };
 
 /**
+ * Staff WhatsApp Agent Response
+ * Generates response for clinic staff based on system data context.
+ */
+export const getStaffAssistantResponse = async (
+    userQuery: string,
+    context: any // Object containing full system data
+): Promise<string> => {
+    if (!apiKey) return "API Key missing. Cannot process request.";
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `You are the 'JuaAfya Ops Bot', a highly capable and omniscient operational assistant for ${context.clinic?.name || 'the clinic'}.
+            
+            You have FULL ACCESS to the following live clinic data:
+            1. **Clinic Profile**: Name, location, contact info.
+            2. **Team Members**: Names, roles, phone numbers, and status.
+            3. **Appointments**: Full history and upcoming schedule with patient names and reasons.
+            4. **Inventory**: Complete stock list, prices, expiration dates, and suppliers.
+            5. **Patients**: Demographics (Age, Gender), contact info, latest vitals, and notes.
+
+            Current Date: ${context.today}
+            Current User: ${context.user?.name} (${context.user?.role})
+
+            Current Data Context:
+            ${JSON.stringify(context, null, 2)}
+
+            Instructions:
+            1. Answer the user's question accurately using the provided data.
+            2. You can perform complex lookups (e.g., "Who is working today?", "Do we have Paracetamol?", "What is Wanjiku's phone number?", "List all appointments for today").
+            3. If looking for a patient or item, use partial matching (e.g., "Wanjiku" matches "Wanjiku Kamau").
+            4. Be professional but helpful, mimicking a smart WhatsApp bot.
+            5. Use formatting like *bold* for emphasis and emojis (📅, 📦, 👤) to make the text readable.
+            6. If the data is not in the context, politely say you don't have that specific record.
+            
+            User Query: "${userQuery}"
+            `,
+        });
+        return response.text || "I didn't catch that. Could you try again?";
+    } catch (error) {
+        console.error("Gemini Staff Agent Error:", error);
+        return "System error: Unable to process request at this time.";
+    }
+};
+
+/**
  * Chatbot initialization.
  * Uses gemini-3-pro-preview for complex reasoning.
  */

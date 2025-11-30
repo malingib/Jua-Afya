@@ -4,7 +4,7 @@ import { ViewState, TeamMember } from '../types';
 import { 
   LayoutDashboard, Users, Calendar, Pill, Settings, HelpCircle, 
   Activity, MessageSquare, ClipboardList, Stethoscope, TestTube, CreditCard, 
-  ShieldCheck, Building2, CheckCircle, DollarSign, Menu, X
+  ShieldCheck, Building2, CheckCircle, DollarSign, Menu, X, Smartphone
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -44,6 +44,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, lowStockCount =
     // General Management
     { id: 'patients', label: 'Patients', icon: Users, roles: ['Admin', 'Doctor', 'Nurse', 'Receptionist'] },
     { id: 'appointments', label: 'Appointments', icon: Calendar, roles: ['Admin', 'Doctor', 'Nurse', 'Receptionist'] },
+    { id: 'whatsapp-agent', label: 'WhatsApp Agent', icon: Smartphone, roles: ['Admin', 'Doctor', 'Nurse', 'Receptionist', 'Pharmacist'] },
     { id: 'bulk-sms', label: 'Broadcast', icon: MessageSquare, roles: ['Admin', 'Receptionist'] },
     { id: 'reports', label: 'Reports', icon: Activity, roles: ['Admin', 'Doctor', 'Accountant'] },
     { id: 'settings', label: 'Clinic Settings', icon: Settings, roles: ['Admin'] },
@@ -177,7 +178,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, lowStockCount =
                       <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
                           {currentUser.role === 'SuperAdmin' ? <ShieldCheck className="w-6 h-6 text-indigo-400" /> : <Activity className="w-6 h-6 text-green-400" />}
                       </div>
-                      <span className="font-bold text-xl">{currentUser.role === 'SuperAdmin' ? 'JuaAfya OS' : 'JuaAfya'}</span>
+                      <span className="text-xl font-bold">Menu</span>
                   </div>
                   <button onClick={() => setMobileMenuOpen(false)} className="p-2 bg-white/10 rounded-full">
                       <X className="w-6 h-6" />
@@ -188,54 +189,25 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, lowStockCount =
                       <button
                           key={item.id}
                           onClick={() => handleMobileNav(item.id as ViewState)}
-                          className={`flex items-center w-full p-4 rounded-xl transition-colors ${
-                              currentView === item.id ? 'bg-white/10 text-white font-bold' : 'text-slate-400 hover:bg-white/5'
+                          className={`flex items-center w-full px-6 py-4 rounded-xl transition-all ${
+                              currentView === item.id ? 'bg-sidebar-hover text-white font-bold' : 'text-slate-400 hover:text-white'
                           }`}
                       >
-                          <item.icon className="w-6 h-6 mr-4" />
-                          <span className="text-lg">{item.label}</span>
-                          {item.id === 'pharmacy' && lowStockCount > 0 && (
-                              <span className="ml-auto bg-red-500 text-white text-xs px-2 py-1 rounded-full font-bold">{lowStockCount}</span>
-                          )}
+                          <item.icon className="w-5 h-5 mr-4" />
+                          {item.label}
                       </button>
                   ))}
-              </div>
-              <div className="p-6 border-t border-white/10">
-                  <div className="flex items-center gap-3">
-                      <img src={currentUser.avatar} alt="Avatar" className="w-12 h-12 rounded-full border-2 border-green-500" />
-                      <div>
-                          <p className="font-bold">{currentUser.name}</p>
-                          <p className="text-sm text-slate-400">{currentUser.role}</p>
-                      </div>
-                  </div>
               </div>
           </div>
       )}
 
-      {/* Mobile Bottom Nav (Quick Actions) */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 z-30 px-6 py-3 flex justify-between items-center shadow-[0_-4px_20px_-1px_rgba(0,0,0,0.05)] safe-area-pb transition-colors no-print">
-        {navItems.slice(0, 4).map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setView(item.id as ViewState)}
-            className={`flex flex-col items-center p-2 rounded-xl transition-all relative ${
-              currentView === item.id ? 'text-brand-600 dark:text-brand-400 scale-105' : 'text-slate-400'
-            }`}
-          >
-            <item.icon className={`w-6 h-6 ${currentView === item.id ? 'fill-brand-100 dark:fill-brand-900' : ''}`} strokeWidth={currentView === item.id ? 2.5 : 2} />
-            {item.id === 'pharmacy' && lowStockCount > 0 && (
-                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-slate-800"></span>
-            )}
-          </button>
-        ))}
-        {/* More Button */}
-        <button
-            onClick={() => setMobileMenuOpen(true)}
-            className="flex flex-col items-center p-2 rounded-xl text-slate-400"
-        >
-            <Menu className="w-6 h-6" />
-        </button>
-      </div>
+      {/* Mobile Toggle Button */}
+      <button 
+          onClick={() => setMobileMenuOpen(true)}
+          className="fixed bottom-6 left-6 md:hidden z-40 p-4 bg-sidebar text-white rounded-full shadow-2xl flex items-center justify-center"
+      >
+          <Menu className="w-6 h-6" />
+      </button>
     </>
   );
 };

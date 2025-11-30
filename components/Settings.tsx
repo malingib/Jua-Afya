@@ -438,7 +438,7 @@ const Settings: React.FC<SettingsProps> = ({ isDarkMode, toggleTheme, settings, 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                  {[
                      { id: 'appointmentReminders', label: 'Patient Appointment Reminders', desc: 'Auto-send 24h before', icon: Layout },
-                     { id: 'lowStockAlerts', label: 'Low Stock Warnings', desc: 'When items dip below 10 units', icon: AlertTriangle },
+                     { id: 'lowStockAlerts', label: 'Low Stock Warnings', desc: 'Notify when stock ≤ Minimum Level', icon: AlertTriangle },
                      { id: 'marketingEmails', label: 'Marketing Campaigns', desc: 'Seasonal promotions', icon: Globe },
                  ].map((item) => (
                      <div key={item.id} className="p-4 border border-slate-200 dark:border-slate-700 rounded-xl flex items-start gap-3">

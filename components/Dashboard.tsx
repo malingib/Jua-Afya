@@ -30,8 +30,8 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory
   useEffect(() => {
       const msgs = [];
       
-      // Check Low Stock
-      const lowStockItems = inventory.filter(i => i.stock < 10);
+      // Check Low Stock (Configure threshold: stock <= minStockLevel)
+      const lowStockItems = inventory.filter(i => i.stock <= i.minStockLevel);
       if (lowStockItems.length > 0) {
           msgs.push({
               id: 'stock-alert',
@@ -100,7 +100,8 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory
   // Logic
   const handleGetBriefing = async () => {
     setLoadingBriefing(true);
-    const lowStock = inventory.filter(i => i.stock < 10).length;
+    // Use configured threshold logic: stock <= minStockLevel
+    const lowStock = inventory.filter(i => i.stock <= i.minStockLevel).length;
     const text = await generateDailyBriefing(appointments.length, lowStock, 'KSh 45k');
     setBriefing(text);
     setLoadingBriefing(false);

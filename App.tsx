@@ -12,6 +12,7 @@ import ChatBot from './components/ChatBot';
 import BulkSMS from './components/BulkSMS';
 import PatientQueue from './components/PatientQueue';
 import SuperAdminDashboard from './components/SuperAdminDashboard';
+import WhatsAppAgent from './components/WhatsAppAgent';
 import { ViewState, Patient, Appointment, InventoryItem, ClinicSettings, Notification, Supplier, InventoryLog, Visit, VisitPriority, TeamMember } from './types';
 import { MOCK_PATIENTS, MOCK_APPOINTMENTS, MOCK_INVENTORY, MOCK_SUPPLIERS, MOCK_LOGS, MOCK_VISITS } from './constants';
 import { CheckCircle, AlertCircle, X } from 'lucide-react';
@@ -21,6 +22,7 @@ const SYSTEM_ADMIN: TeamMember = {
   id: 'sys-owner',
   name: 'System Owner',
   email: 'admin@juaafya-saas.com',
+  phone: '+254700000000',
   role: 'SuperAdmin',
   status: 'Active',
   lastActive: 'Now',
@@ -115,11 +117,11 @@ const App: React.FC = () => {
           }
       },
       team: [
-        { id: '1', name: 'Dr. Andrew Kimani', email: 'andrew@juaafya.com', role: 'Admin', status: 'Active', lastActive: 'Now', avatar: 'https://i.pravatar.cc/150?img=11' },
-        { id: '2', name: 'Sarah Wanjiku', email: 'sarah@juaafya.com', role: 'Nurse', status: 'Active', lastActive: '2h ago', avatar: 'https://i.pravatar.cc/150?img=5' },
-        { id: '3', name: 'John Omondi', email: 'john@juaafya.com', role: 'Doctor', status: 'Active', lastActive: '5m ago', avatar: 'https://i.pravatar.cc/150?img=12' },
-        { id: '4', name: 'Grace M.', email: 'grace@juaafya.com', role: 'Receptionist', status: 'Active', lastActive: 'Now', avatar: 'https://i.pravatar.cc/150?img=9' },
-        { id: '5', name: 'Peter K.', email: 'peter@juaafya.com', role: 'Lab Tech', status: 'Active', lastActive: '10m ago', avatar: 'https://i.pravatar.cc/150?img=8' }
+        { id: '1', name: 'Dr. Andrew Kimani', email: 'andrew@juaafya.com', phone: '+254712345678', role: 'Admin', status: 'Active', lastActive: 'Now', avatar: 'https://i.pravatar.cc/150?img=11' },
+        { id: '2', name: 'Sarah Wanjiku', email: 'sarah@juaafya.com', phone: '+254722987654', role: 'Nurse', status: 'Active', lastActive: '2h ago', avatar: 'https://i.pravatar.cc/150?img=5' },
+        { id: '3', name: 'John Omondi', email: 'john@juaafya.com', phone: '+254733111222', role: 'Doctor', status: 'Active', lastActive: '5m ago', avatar: 'https://i.pravatar.cc/150?img=12' },
+        { id: '4', name: 'Grace M.', email: 'grace@juaafya.com', phone: '+254700123456', role: 'Receptionist', status: 'Active', lastActive: 'Now', avatar: 'https://i.pravatar.cc/150?img=9' },
+        { id: '5', name: 'Peter K.', email: 'peter@juaafya.com', phone: '+254799888777', role: 'Lab Tech', status: 'Active', lastActive: '10m ago', avatar: 'https://i.pravatar.cc/150?img=8' }
       ]
   });
 
@@ -357,6 +359,8 @@ const App: React.FC = () => {
         );
       case 'bulk-sms':
         return <BulkSMS patients={patients} showToast={showToast} />;
+      case 'whatsapp-agent':
+        return <WhatsAppAgent team={settings.team} appointments={appointments} inventory={inventory} patients={patients} settings={settings} />;
       case 'reports':
         return <Reports />;
       case 'settings':

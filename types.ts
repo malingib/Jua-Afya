@@ -97,6 +97,7 @@ export interface TeamMember {
   id: string;
   name: string;
   email: string;
+  phone?: string; // Added for WhatsApp Auth
   role: Role;
   status: 'Active' | 'Invited' | 'Deactivated';
   lastActive: string;
@@ -271,6 +272,7 @@ export type ViewState =
   | 'settings' 
   | 'profile' 
   | 'bulk-sms'
+  | 'whatsapp-agent'
   // Super Admin Specific Views
   | 'sa-overview'
   | 'sa-clinics'
