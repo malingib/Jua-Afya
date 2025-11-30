@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+
+import React, { useState, useMemo } from 'react';
 import { Patient, Gender } from '../types';
-import { Search, Plus, Phone, FileText, Sparkles, X, Activity, MessageSquare, MoreHorizontal, Printer, Filter, Edit2, Save, User, Trash2, Send, Loader2 } from 'lucide-react';
+import { Search, Plus, Phone, FileText, Sparkles, X, Activity, MessageSquare, MoreHorizontal, Printer, Filter, Edit2, Save, User, Trash2, Send, Loader2, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
 import { analyzePatientNotes, draftAppointmentSms } from '../services/geminiService';
 import { sendSms } from '../services/smsService';
 
@@ -15,6 +16,13 @@ const PatientList: React.FC<PatientListProps> = ({ patients, addPatient, updateP
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+
+  // Action Menu State
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+
   // Add Patient State
   const [isAdding, setIsAdding] = useState(false);
   const [newPatientData, setNewPatientData] = useState({
@@ -49,7 +57,7 @@ const PatientList: React.FC<PatientListProps> = ({ patients, addPatient, updateP
   const [smsDraft, setSmsDraft] = useState('');
 
   // Enhanced Filter Logic
-  const filtered = patients
+  const filtered = useMemo(() => patients
     .filter(p => {
         const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.phone.includes(searchTerm) || p.id.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesGender = genderFilter === 'All' || p.gender === genderFilter;
@@ -58,9 +66,16 @@ const PatientList: React.FC<PatientListProps> = ({ patients, addPatient, updateP
     .sort((a, b) => {
         if (sortBy === 'Name') return a.name.localeCompare(b.name);
         if (sortBy === 'Age') return a.age - b.age;
-        // Default to Recent (based on lastVisit string for now, roughly)
+        // Default to Recent
         return new Date(b.lastVisit).getTime() - new Date(a.lastVisit).getTime();
-    });
+    }), [patients, searchTerm, genderFilter, sortBy]);
+
+  // Pagination Logic
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const paginatedPatients = filtered.slice(
+      (currentPage - 1) * itemsPerPage,
+      currentPage * itemsPerPage
+  );
 
   const handleAnalyzeNotes = async (notes: string) => {
     setIsAnalyzing(true);
@@ -100,6 +115,7 @@ const PatientList: React.FC<PatientListProps> = ({ patients, addPatient, updateP
   const handleEditClick = (patient: Patient) => {
     setEditFormData({ ...patient });
     setIsEditing(true);
+    setActiveMenuId(null);
   };
 
   const handleEditChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -132,11 +148,13 @@ const PatientList: React.FC<PatientListProps> = ({ patients, addPatient, updateP
     }
   };
 
-  const handleDelete = () => {
-    if (editFormData && confirm(`Are you sure you want to delete ${editFormData.name}? This action cannot be undone.`)) {
-        deletePatient(editFormData.id);
+  const handleDelete = (id?: string) => {
+    const targetId = id || editFormData?.id;
+    if (targetId && confirm(`Are you sure you want to delete this patient record? This action cannot be undone.`)) {
+        deletePatient(targetId);
         setIsEditing(false);
         setSelectedPatient(null);
+        setActiveMenuId(null);
     }
   };
 
@@ -206,6 +224,13 @@ const PatientList: React.FC<PatientListProps> = ({ patients, addPatient, updateP
   const handleCall = (phone: string) => {
       window.location.href = `tel:${phone}`;
   };
+
+  // Close menus when clicking outside
+  React.useEffect(() => {
+      const handleClickOutside = () => setActiveMenuId(null);
+      if (activeMenuId) document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+  }, [activeMenuId]);
 
   const renderPatientDetail = (patient: Patient) => (
     <div className="fixed inset-0 z-50 flex justify-center items-center p-4 sm:p-6 no-print">
@@ -558,7 +583,7 @@ const PatientList: React.FC<PatientListProps> = ({ patients, addPatient, updateP
                             <div className="flex gap-3 pt-4">
                                 <button 
                                     type="button" 
-                                    onClick={handleDelete}
+                                    onClick={() => handleDelete(editFormData.id)}
                                     className="px-4 py-2 text-red-600 dark:text-red-400 font-medium bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors flex items-center justify-center gap-2"
                                 >
                                     <Trash2 className="w-4 h-4" />
@@ -789,71 +814,118 @@ const PatientList: React.FC<PatientListProps> = ({ patients, addPatient, updateP
                 </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm overflow-hidden transition-colors duration-200">
-                <table className="w-full text-left border-collapse">
-                    <thead className="bg-gray-50/50 dark:bg-slate-700/50 text-xs uppercase text-slate-400 font-semibold border-b border-gray-100 dark:border-slate-700">
-                        <tr>
-                            <th className="px-6 py-4">ID</th>
-                            <th className="px-6 py-4">Name</th>
-                            <th className="px-6 py-4">Age</th>
-                            <th className="px-6 py-4">Date & Time</th>
-                            <th className="px-6 py-4">Appointed For</th>
-                            <th className="px-6 py-4">Report</th>
-                            <th className="px-6 py-4 text-right">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50 dark:divide-slate-700 text-sm">
-                        {filtered.length > 0 ? filtered.map((patient) => (
-                            <tr 
-                                key={patient.id} 
-                                onClick={() => setSelectedPatient(patient)}
-                                className="hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors cursor-pointer group"
-                            >
-                                <td className="px-6 py-4 font-mono text-slate-500 dark:text-slate-400 text-xs">
-                                    #{patient.id}
-                                </td>
-                                <td className="px-6 py-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-600">
-                                            <img src={`https://i.pravatar.cc/150?u=${patient.id}`} alt="avatar" className="w-full h-full object-cover" />
-                                        </div>
-                                        <div>
-                                            <div className="font-bold text-slate-900 dark:text-white">{patient.name}</div>
-                                            <div className="text-xs text-slate-400">{patient.phone}</div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4 text-slate-500 dark:text-slate-400 font-medium">{patient.age} years</td>
-                                <td className="px-6 py-4">
-                                    <div className="text-slate-900 dark:text-slate-200 font-medium">{patient.lastVisit}</div>
-                                    <div className="text-xs text-slate-400">09:15 AM</div>
-                                </td>
-                                <td className="px-6 py-4">
-                                    <span className="bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-300 px-3 py-1 rounded-full text-xs font-semibold">
-                                        Checkup
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4">
-                                    <div className="flex items-center gap-2 text-slate-400 hover:text-brand-600 transition-colors">
-                                        <FileText className="w-4 h-4" />
-                                        <span className="text-xs font-medium">View</span>
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4 text-right">
-                                    <button className="p-2 hover:bg-slate-100 dark:hover:bg-slate-600 rounded-full text-slate-400">
-                                        <MoreHorizontal className="w-5 h-5" />
-                                    </button>
-                                </td>
-                            </tr>
-                        )) : (
+            <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-visible transition-colors duration-200 flex flex-col min-h-[400px]">
+                <div className="flex-1 overflow-visible">
+                    <table className="w-full text-left border-collapse">
+                        <thead className="bg-gray-50/50 dark:bg-slate-700/50 text-xs uppercase text-slate-400 font-semibold border-b border-gray-100 dark:border-slate-700">
                             <tr>
-                                <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
-                                    No patients found matching your criteria.
-                                </td>
+                                <th className="px-6 py-4">ID</th>
+                                <th className="px-6 py-4">Name</th>
+                                <th className="px-6 py-4">Age</th>
+                                <th className="px-6 py-4">Last Visit</th>
+                                <th className="px-6 py-4">Status</th>
+                                <th className="px-6 py-4">Report</th>
+                                <th className="px-6 py-4 text-right">Action</th>
                             </tr>
-                        )}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50 dark:divide-slate-700 text-sm">
+                            {paginatedPatients.length > 0 ? paginatedPatients.map((patient) => (
+                                <tr 
+                                    key={patient.id} 
+                                    className="hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors cursor-pointer group"
+                                    onClick={() => setSelectedPatient(patient)}
+                                >
+                                    <td className="px-6 py-4 font-mono text-slate-500 dark:text-slate-400 text-xs">
+                                        #{patient.id}
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-600">
+                                                <img src={`https://i.pravatar.cc/150?u=${patient.id}`} alt="avatar" className="w-full h-full object-cover" />
+                                            </div>
+                                            <div>
+                                                <div className="font-bold text-slate-900 dark:text-white">{patient.name}</div>
+                                                <div className="text-xs text-slate-400">{patient.phone}</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-slate-500 dark:text-slate-400 font-medium">{patient.age} years</td>
+                                    <td className="px-6 py-4">
+                                        <div className="text-slate-900 dark:text-slate-200 font-medium">{patient.lastVisit}</div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <span className="bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-300 px-3 py-1 rounded-full text-xs font-semibold">
+                                            Registered
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-2 text-slate-400 hover:text-brand-600 transition-colors">
+                                            <FileText className="w-4 h-4" />
+                                            <span className="text-xs font-medium">View</span>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-right relative">
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); setActiveMenuId(activeMenuId === patient.id ? null : patient.id); }}
+                                            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-600 rounded-full text-slate-400 transition-colors"
+                                        >
+                                            <MoreHorizontal className="w-5 h-5" />
+                                        </button>
+                                        
+                                        {/* Action Menu */}
+                                        {activeMenuId === patient.id && (
+                                            <div className="absolute right-8 top-8 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-100 dark:border-slate-700 z-20 animate-in zoom-in-95 origin-top-right">
+                                                <div className="p-1">
+                                                    <button onClick={(e) => { e.stopPropagation(); setSelectedPatient(patient); setActiveMenuId(null); }} className="w-full text-left px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg flex items-center gap-2">
+                                                        <Eye className="w-4 h-4" /> View Details
+                                                    </button>
+                                                    <button onClick={(e) => { e.stopPropagation(); handleEditClick(patient); }} className="w-full text-left px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg flex items-center gap-2">
+                                                        <Edit2 className="w-4 h-4" /> Edit Profile
+                                                    </button>
+                                                    <div className="h-px bg-slate-100 dark:bg-slate-700 my-1"></div>
+                                                    <button onClick={(e) => { e.stopPropagation(); handleDelete(patient.id); }} className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex items-center gap-2 font-medium">
+                                                        <Trash2 className="w-4 h-4" /> Delete Patient
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </td>
+                                </tr>
+                            )) : (
+                                <tr>
+                                    <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                                        No patients found matching your criteria.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                    <div className="p-4 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between mt-auto">
+                        <div className="text-sm text-slate-500 dark:text-slate-400">
+                            Showing page {currentPage} of {totalPages}
+                        </div>
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                disabled={currentPage === 1}
+                                className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-600 dark:text-slate-300"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            <button 
+                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                disabled={currentPage === totalPages}
+                                className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-600 dark:text-slate-300"
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
           </>
       )}

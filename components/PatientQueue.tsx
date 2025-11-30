@@ -55,7 +55,7 @@ const PatientQueue: React.FC<PatientQueueProps> = ({ visits, patients, inventory
       } else if (!restrictedStages && activeStage === undefined) {
           setActiveStage('Check-In');
       }
-  }, [restrictedStages]);
+  }, [restrictedStages, activeStage]);
 
   // Stage Definitions
   const allStages: { id: VisitStage; label: string; icon: any; color: string }[] = [

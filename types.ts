@@ -91,7 +91,7 @@ export interface BillingInfo {
   };
 }
 
-export type Role = 'Admin' | 'Doctor' | 'Nurse' | 'Receptionist' | 'Lab Tech' | 'Pharmacist';
+export type Role = 'SuperAdmin' | 'Admin' | 'Doctor' | 'Nurse' | 'Receptionist' | 'Lab Tech' | 'Pharmacist' | 'Accountant';
 
 export interface TeamMember {
   id: string;
@@ -202,6 +202,61 @@ export interface Visit {
   paymentStatus: 'Pending' | 'Paid';
 }
 
+// -- Super Admin Types --
+
+export interface Clinic {
+    id: string;
+    name: string;
+    ownerName: string;
+    email: string;
+    plan: 'Free' | 'Pro' | 'Enterprise';
+    status: 'Active' | 'Suspended' | 'Pending';
+    joinedDate: string;
+    lastPaymentDate: string;
+    nextPaymentDate: string;
+    revenueYTD: number;
+}
+
+export interface ApprovalRequest {
+    id: string;
+    type: 'New Clinic' | 'Refund' | 'Plan Upgrade';
+    clinicName: string;
+    requesterName: string;
+    date: string;
+    details: string;
+    status: 'Pending' | 'Approved' | 'Rejected';
+}
+
+export interface SaaSTransaction {
+    id: string;
+    clinicName: string;
+    amount: number;
+    date: string;
+    status: 'Success' | 'Failed' | 'Pending';
+    method: 'Card' | 'M-Pesa';
+    plan: string;
+}
+
+export interface SaaSPlatformSettings {
+    maintenanceMode: boolean;
+    allowNewRegistrations: boolean;
+    globalAnnouncement: string;
+    pricing: {
+        free: number;
+        pro: number;
+        enterprise: number;
+    };
+}
+
+export interface SystemLog {
+    id: string;
+    action: string;
+    admin: string;
+    target: string;
+    timestamp: string;
+    status: 'Success' | 'Warning' | 'Error';
+}
+
 export type ViewState = 
   | 'dashboard' 
   | 'reception'   // Reception Dashboard
@@ -215,4 +270,10 @@ export type ViewState =
   | 'reports' 
   | 'settings' 
   | 'profile' 
-  | 'bulk-sms';
+  | 'bulk-sms'
+  // Super Admin Specific Views
+  | 'sa-overview'
+  | 'sa-clinics'
+  | 'sa-approvals'
+  | 'sa-payments'
+  | 'sa-settings';

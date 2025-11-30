@@ -1,7 +1,11 @@
 
 import React, { useState } from 'react';
-import { ViewState, TeamMember, Role } from '../types';
-import { LayoutDashboard, Users, Calendar, Pill, Settings, LogOut, HelpCircle, Activity, MessageSquare, ClipboardList, Stethoscope, TestTube, CreditCard, UserCircle } from 'lucide-react';
+import { ViewState, TeamMember } from '../types';
+import { 
+  LayoutDashboard, Users, Calendar, Pill, Settings, HelpCircle, 
+  Activity, MessageSquare, ClipboardList, Stethoscope, TestTube, CreditCard, 
+  ShieldCheck, Building2, CheckCircle, DollarSign, Menu, X
+} from 'lucide-react';
 
 interface SidebarProps {
   currentView: ViewState;
@@ -10,18 +14,28 @@ interface SidebarProps {
   currentUser: TeamMember;
   switchUser: (member: TeamMember) => void;
   team: TeamMember[];
+  systemAdmin: TeamMember;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, lowStockCount = 0, currentUser, switchUser, team }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, lowStockCount = 0, currentUser, switchUser, team, systemAdmin }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Define all possible navigation items
   const allNavItems = [
+    // Super Admin Views
+    { id: 'sa-overview', label: 'Overview', icon: LayoutDashboard, roles: ['SuperAdmin'] },
+    { id: 'sa-clinics', label: 'Clinics', icon: Building2, roles: ['SuperAdmin'] },
+    { id: 'sa-approvals', label: 'Approvals', icon: CheckCircle, roles: ['SuperAdmin'] },
+    { id: 'sa-payments', label: 'Financials', icon: DollarSign, roles: ['SuperAdmin'] },
+    { id: 'sa-settings', label: 'Global Settings', icon: Settings, roles: ['SuperAdmin'] },
+    
+    // Clinic Views (Not for SuperAdmin)
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['Admin', 'Doctor', 'Nurse', 'Receptionist', 'Pharmacist', 'Lab Tech'] },
     
     // Departmental Views
     { id: 'reception', label: 'Reception Desk', icon: ClipboardList, roles: ['Admin', 'Receptionist'] },
-    { id: 'triage', label: 'Triage / Vitals', icon: Activity, roles: ['Admin', 'Nurse'] },
+    { id: 'triage', label: 'Triage / Vitals', icon: Activity, roles: ['Admin', 'Nurse', 'Doctor'] },
     { id: 'consultation', label: 'Consultations', icon: Stethoscope, roles: ['Admin', 'Doctor'] },
     { id: 'lab-work', label: 'Laboratory', icon: TestTube, roles: ['Admin', 'Lab Tech', 'Doctor'] },
     { id: 'billing-desk', label: 'Billing', icon: CreditCard, roles: ['Admin', 'Receptionist', 'Accountant'] },
@@ -31,12 +45,17 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, lowStockCount =
     { id: 'patients', label: 'Patients', icon: Users, roles: ['Admin', 'Doctor', 'Nurse', 'Receptionist'] },
     { id: 'appointments', label: 'Appointments', icon: Calendar, roles: ['Admin', 'Doctor', 'Nurse', 'Receptionist'] },
     { id: 'bulk-sms', label: 'Broadcast', icon: MessageSquare, roles: ['Admin', 'Receptionist'] },
-    { id: 'reports', label: 'Reports', icon: Activity, roles: ['Admin', 'Doctor'] },
-    { id: 'settings', label: 'Settings', icon: Settings, roles: ['Admin'] },
+    { id: 'reports', label: 'Reports', icon: Activity, roles: ['Admin', 'Doctor', 'Accountant'] },
+    { id: 'settings', label: 'Clinic Settings', icon: Settings, roles: ['Admin'] },
   ];
 
   // Filter items based on current user role
   const navItems = allNavItems.filter(item => item.roles.includes(currentUser.role));
+
+  const handleMobileNav = (view: ViewState) => {
+      setView(view);
+      setMobileMenuOpen(false);
+  };
 
   return (
     <>
@@ -45,11 +64,17 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, lowStockCount =
         {/* Logo Area */}
         <div className="p-8 flex items-center space-x-3 mb-2">
             <div className="relative">
-                 <Activity className="w-8 h-8 text-white" />
+                 {currentUser.role === 'SuperAdmin' ? (
+                     <ShieldCheck className="w-8 h-8 text-indigo-400" />
+                 ) : (
+                     <Activity className="w-8 h-8 text-white" />
+                 )}
                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full"></div>
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-white leading-none">JuaAfya</h1>
+              <h1 className="text-2xl font-bold tracking-tight text-white leading-none">
+                  {currentUser.role === 'SuperAdmin' ? 'JuaAfya OS' : 'JuaAfya'}
+              </h1>
             </div>
         </div>
         
@@ -65,12 +90,12 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, lowStockCount =
                   : 'text-slate-400 hover:text-white hover:bg-white/5'
               }`}
             >
-              <item.icon className={`w-5 h-5 mr-4 transition-colors ${currentView === item.id ? 'text-green-400' : 'text-slate-400 group-hover:text-white'}`} />
+              <item.icon className={`w-5 h-5 mr-4 transition-colors ${currentView === item.id ? (currentUser.role === 'SuperAdmin' ? 'text-indigo-400' : 'text-green-400') : 'text-slate-400 group-hover:text-white'}`} />
               <span className="text-base">{item.label}</span>
               
               {/* Active Indicator */}
               {currentView === item.id && (
-                  <div className="ml-auto w-1.5 h-1.5 rounded-full bg-green-400"></div>
+                  <div className={`ml-auto w-1.5 h-1.5 rounded-full ${currentUser.role === 'SuperAdmin' ? 'bg-indigo-400' : 'bg-green-400'}`}></div>
               )}
 
               {/* Low Stock Badge for Pharmacy */}
@@ -93,15 +118,21 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, lowStockCount =
                      <img src={currentUser.avatar} alt="Avatar" className="w-10 h-10 rounded-full border-2 border-green-500/50" />
                      <div className="ml-3 text-left overflow-hidden">
                          <p className="text-sm font-bold text-white truncate">{currentUser.name}</p>
-                         <p className="text-xs text-green-400 font-medium truncate">{currentUser.role}</p>
+                         <p className="text-xs text-green-400 font-medium truncate">{currentUser.role === 'SuperAdmin' ? 'System Owner' : currentUser.role}</p>
                      </div>
                      <Settings className="w-4 h-4 text-slate-400 ml-auto" />
                  </button>
 
                  {showUserMenu && (
                      <div className="absolute bottom-full left-0 w-full mb-2 bg-white text-slate-800 rounded-xl shadow-xl overflow-hidden animate-in slide-in-from-bottom-2">
-                         <div className="p-2 bg-slate-50 border-b border-slate-100 text-xs font-bold text-slate-500 uppercase">Switch Role</div>
+                         <div className="p-2 bg-slate-50 border-b border-slate-100 text-xs font-bold text-slate-500 uppercase flex justify-between">
+                            <span>Switch Account</span>
+                            <span className="text-[10px] text-slate-300">Simulated</span>
+                         </div>
+                         
+                         {/* Clinic Team List */}
                          <div className="max-h-48 overflow-y-auto">
+                            <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50">Clinic Team (JuaAfya)</div>
                             {team.map(member => (
                                 <button
                                     key={member.id}
@@ -116,15 +147,74 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, lowStockCount =
                                 </button>
                             ))}
                          </div>
+                         
+                         {/* Separator */}
+                         <div className="h-px bg-slate-100 my-1"></div>
+                         
+                         {/* System Admin Button */}
+                         <button
+                            onClick={() => { switchUser(systemAdmin); setShowUserMenu(false); }}
+                            className={`w-full flex items-center p-3 hover:bg-indigo-50 transition-colors ${currentUser.id === systemAdmin.id ? 'bg-indigo-50' : ''}`}
+                         >
+                            <div className="w-8 h-8 rounded-full mr-3 bg-indigo-600 text-white flex items-center justify-center font-bold text-xs">SA</div>
+                            <div className="text-left">
+                                <p className="text-sm font-bold text-indigo-900">System Owner</p>
+                                <p className="text-xs text-indigo-500">Platform Admin</p>
+                            </div>
+                            {currentUser.id === systemAdmin.id && <div className="ml-auto w-2 h-2 rounded-full bg-indigo-600"></div>}
+                         </button>
                      </div>
                  )}
              </div>
         </div>
       </div>
 
-      {/* Mobile Bottom Nav */}
+      {/* Mobile Drawer (Full Menu) */}
+      {mobileMenuOpen && (
+          <div className="fixed inset-0 z-50 md:hidden flex flex-col bg-sidebar text-white animate-in slide-in-from-bottom-full duration-300">
+              <div className="p-6 flex items-center justify-between border-b border-white/10">
+                  <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
+                          {currentUser.role === 'SuperAdmin' ? <ShieldCheck className="w-6 h-6 text-indigo-400" /> : <Activity className="w-6 h-6 text-green-400" />}
+                      </div>
+                      <span className="font-bold text-xl">{currentUser.role === 'SuperAdmin' ? 'JuaAfya OS' : 'JuaAfya'}</span>
+                  </div>
+                  <button onClick={() => setMobileMenuOpen(false)} className="p-2 bg-white/10 rounded-full">
+                      <X className="w-6 h-6" />
+                  </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                  {navItems.map((item) => (
+                      <button
+                          key={item.id}
+                          onClick={() => handleMobileNav(item.id as ViewState)}
+                          className={`flex items-center w-full p-4 rounded-xl transition-colors ${
+                              currentView === item.id ? 'bg-white/10 text-white font-bold' : 'text-slate-400 hover:bg-white/5'
+                          }`}
+                      >
+                          <item.icon className="w-6 h-6 mr-4" />
+                          <span className="text-lg">{item.label}</span>
+                          {item.id === 'pharmacy' && lowStockCount > 0 && (
+                              <span className="ml-auto bg-red-500 text-white text-xs px-2 py-1 rounded-full font-bold">{lowStockCount}</span>
+                          )}
+                      </button>
+                  ))}
+              </div>
+              <div className="p-6 border-t border-white/10">
+                  <div className="flex items-center gap-3">
+                      <img src={currentUser.avatar} alt="Avatar" className="w-12 h-12 rounded-full border-2 border-green-500" />
+                      <div>
+                          <p className="font-bold">{currentUser.name}</p>
+                          <p className="text-sm text-slate-400">{currentUser.role}</p>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* Mobile Bottom Nav (Quick Actions) */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 z-30 px-6 py-3 flex justify-between items-center shadow-[0_-4px_20px_-1px_rgba(0,0,0,0.05)] safe-area-pb transition-colors no-print">
-        {navItems.slice(0, 5).map((item) => (
+        {navItems.slice(0, 4).map((item) => (
           <button
             key={item.id}
             onClick={() => setView(item.id as ViewState)}
@@ -138,6 +228,13 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, lowStockCount =
             )}
           </button>
         ))}
+        {/* More Button */}
+        <button
+            onClick={() => setMobileMenuOpen(true)}
+            className="flex flex-col items-center p-2 rounded-xl text-slate-400"
+        >
+            <Menu className="w-6 h-6" />
+        </button>
       </div>
     </>
   );

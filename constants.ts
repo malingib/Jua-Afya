@@ -1,8 +1,5 @@
 
-
-
-
-import { Patient, Appointment, InventoryItem, Gender, Supplier, InventoryLog, Visit, LabTestProfile } from './types';
+import { Patient, Appointment, InventoryItem, Gender, Supplier, InventoryLog, Visit, LabTestProfile, Clinic, ApprovalRequest, SaaSTransaction, SystemLog } from './types';
 
 export const MOCK_PATIENTS: Patient[] = [
   {
@@ -123,4 +120,32 @@ export const MOCK_VISITS: Visit[] = [
     totalBill: 500,
     paymentStatus: 'Pending'
   }
+];
+
+export const MOCK_CLINICS: Clinic[] = [
+    { id: 'C001', name: 'JuaAfya Downtown', ownerName: 'Dr. Andrew', email: 'andrew@juaafya.com', plan: 'Pro', status: 'Active', joinedDate: '2023-01-15', lastPaymentDate: '2023-10-01', nextPaymentDate: '2023-11-01', revenueYTD: 450000 },
+    { id: 'C002', name: 'Sunrise Medical', ownerName: 'Dr. Keziah', email: 'keziah@sunrise.com', plan: 'Enterprise', status: 'Active', joinedDate: '2023-03-10', lastPaymentDate: '2023-10-05', nextPaymentDate: '2023-11-05', revenueYTD: 1200000 },
+    { id: 'C003', name: 'Mombasa Road Clinic', ownerName: 'Peter O.', email: 'peter@mrclinic.co.ke', plan: 'Free', status: 'Active', joinedDate: '2023-08-22', lastPaymentDate: '-', nextPaymentDate: '-', revenueYTD: 0 },
+    { id: 'C004', name: 'Westlands Health', ownerName: 'Sarah M.', email: 'sarah@westhealth.com', plan: 'Pro', status: 'Suspended', joinedDate: '2022-11-01', lastPaymentDate: '2023-08-01', nextPaymentDate: '2023-09-01', revenueYTD: 340000 },
+];
+
+export const MOCK_REQUESTS: ApprovalRequest[] = [
+    { id: 'R001', type: 'New Clinic', clinicName: 'Afya Bora Eastleigh', requesterName: 'Ahmed Y.', date: '2023-10-26', details: 'New registration request. Documents verified.', status: 'Pending' },
+    { id: 'R002', type: 'Plan Upgrade', clinicName: 'Mombasa Road Clinic', requesterName: 'Peter O.', date: '2023-10-25', details: 'Request to upgrade from Free to Pro plan.', status: 'Pending' },
+    { id: 'R003', type: 'Refund', clinicName: 'Westlands Health', requesterName: 'Sarah M.', date: '2023-10-20', details: 'Refund request for downtime on Oct 15th.', status: 'Rejected' },
+];
+
+export const MOCK_SAAS_TRANSACTIONS: SaaSTransaction[] = [
+    { id: 'TX-9901', clinicName: 'JuaAfya Downtown', amount: 5000, date: '2023-10-01', status: 'Success', method: 'Card', plan: 'Pro' },
+    { id: 'TX-9902', clinicName: 'Sunrise Medical', amount: 12000, date: '2023-10-05', status: 'Success', method: 'M-Pesa', plan: 'Enterprise' },
+    { id: 'TX-9903', clinicName: 'Westlands Health', amount: 5000, date: '2023-10-03', status: 'Failed', method: 'Card', plan: 'Pro' },
+    { id: 'TX-9904', clinicName: 'Afya Bora Eastleigh', amount: 5000, date: '2023-10-27', status: 'Pending', method: 'M-Pesa', plan: 'Pro' },
+];
+
+export const MOCK_SYSTEM_LOGS: SystemLog[] = [
+    { id: 'SL-001', action: 'System Backup', admin: 'Automated', target: 'Database', timestamp: '2023-10-28T02:00:00Z', status: 'Success' },
+    { id: 'SL-002', action: 'Suspend Clinic', admin: 'System Owner', target: 'Westlands Health', timestamp: '2023-10-27T14:30:00Z', status: 'Warning' },
+    { id: 'SL-003', action: 'Pricing Update', admin: 'System Owner', target: 'Pro Plan', timestamp: '2023-10-25T09:15:00Z', status: 'Success' },
+    { id: 'SL-004', action: 'Failed Login', admin: 'Unknown IP', target: 'Admin Portal', timestamp: '2023-10-24T22:10:00Z', status: 'Error' },
+    { id: 'SL-005', action: 'Provision Clinic', admin: 'System Owner', target: 'Sunrise Medical', timestamp: '2023-03-10T10:00:00Z', status: 'Success' },
 ];

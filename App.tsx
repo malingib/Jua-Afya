@@ -11,9 +11,21 @@ import Profile from './components/Profile';
 import ChatBot from './components/ChatBot';
 import BulkSMS from './components/BulkSMS';
 import PatientQueue from './components/PatientQueue';
+import SuperAdminDashboard from './components/SuperAdminDashboard';
 import { ViewState, Patient, Appointment, InventoryItem, ClinicSettings, Notification, Supplier, InventoryLog, Visit, VisitPriority, TeamMember } from './types';
 import { MOCK_PATIENTS, MOCK_APPOINTMENTS, MOCK_INVENTORY, MOCK_SUPPLIERS, MOCK_LOGS, MOCK_VISITS } from './constants';
 import { CheckCircle, AlertCircle, X } from 'lucide-react';
+
+// Dedicated System Owner User (Not part of any clinic)
+const SYSTEM_ADMIN: TeamMember = {
+  id: 'sys-owner',
+  name: 'System Owner',
+  email: 'admin@juaafya-saas.com',
+  role: 'SuperAdmin',
+  status: 'Active',
+  lastActive: 'Now',
+  avatar: 'https://ui-avatars.com/api/?name=System+Owner&background=312e81&color=fff'
+};
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewState>('dashboard');
@@ -107,7 +119,7 @@ const App: React.FC = () => {
         { id: '2', name: 'Sarah Wanjiku', email: 'sarah@juaafya.com', role: 'Nurse', status: 'Active', lastActive: '2h ago', avatar: 'https://i.pravatar.cc/150?img=5' },
         { id: '3', name: 'John Omondi', email: 'john@juaafya.com', role: 'Doctor', status: 'Active', lastActive: '5m ago', avatar: 'https://i.pravatar.cc/150?img=12' },
         { id: '4', name: 'Grace M.', email: 'grace@juaafya.com', role: 'Receptionist', status: 'Active', lastActive: 'Now', avatar: 'https://i.pravatar.cc/150?img=9' },
-        { id: '5', name: 'Peter K.', email: 'peter@juaafya.com', role: 'Lab Tech', status: 'Active', lastActive: '10m ago', avatar: 'https://i.pravatar.cc/150?img=8' },
+        { id: '5', name: 'Peter K.', email: 'peter@juaafya.com', role: 'Lab Tech', status: 'Active', lastActive: '10m ago', avatar: 'https://i.pravatar.cc/150?img=8' }
       ]
   });
 
@@ -116,7 +128,13 @@ const App: React.FC = () => {
 
   const switchUser = (member: TeamMember) => {
       setCurrentUser(member);
-      setCurrentView('dashboard'); // Reset view on switch
+      // Determine default view based on role
+      if (member.role === 'SuperAdmin') setCurrentView('sa-overview');
+      else if (member.role === 'Doctor') setCurrentView('consultation');
+      else if (member.role === 'Nurse') setCurrentView('triage');
+      else if (member.role === 'Receptionist') setCurrentView('reception');
+      else setCurrentView('dashboard');
+      
       showToast(`Switched to ${member.name} (${member.role})`);
   };
 
@@ -295,7 +313,7 @@ const App: React.FC = () => {
       case 'dashboard':
         return <Dashboard appointments={appointments} inventory={inventory} patients={patients} setView={setCurrentView} />;
       
-      // -- DEPARTMENTAL VIEWS --
+      // -- DEPARTMENTAL VIEWS (Dashboard-to-Dashboard workflow) --
       case 'reception':
         return <PatientQueue {...queueProps} restrictedStages={['Check-In', 'Clearance']} />;
       case 'triage':
@@ -307,6 +325,15 @@ const App: React.FC = () => {
       case 'billing-desk':
         return <PatientQueue {...queueProps} restrictedStages={['Billing']} />;
       
+      // -- SUPER ADMIN VIEWS --
+      case 'sa-overview':
+      case 'sa-clinics':
+      case 'sa-approvals':
+      case 'sa-payments':
+      case 'sa-settings':
+        const tab = currentView.replace('sa-', '') as any;
+        return <SuperAdminDashboard currentUser={currentUser} switchUser={switchUser} team={settings.team} activeTab={tab} />;
+
       // -- GENERAL MANAGEMENT --
       case 'patients':
         return <PatientList patients={patients} addPatient={addPatient} updatePatient={updatePatient} deletePatient={deletePatient} />;
@@ -352,6 +379,7 @@ const App: React.FC = () => {
         currentUser={currentUser}
         switchUser={switchUser}
         team={settings.team}
+        systemAdmin={SYSTEM_ADMIN}
       />
 
       {/* Main Content Area */}

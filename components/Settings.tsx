@@ -4,7 +4,8 @@ import {
   Bell, Lock, Globe, CreditCard, ChevronRight, Moon, Sun, Save, 
   Upload, Shield, Smartphone, Mail, AlertTriangle, CheckCircle, 
   Layout, Receipt, Laptop, Smartphone as SmartphoneIcon, LogOut, Loader2,
-  Users, UserPlus, Database, FileText, Activity, Trash2, X, Plus, Download, RefreshCw
+  Users, UserPlus, Database, FileText, Activity, Trash2, X, Plus, Download, RefreshCw,
+  Zap, Check, ArrowRight
 } from 'lucide-react';
 import { ClinicSettings, Role, TeamMember } from '../types';
 
@@ -17,15 +18,36 @@ interface SettingsProps {
 
 type Tab = 'general' | 'notifications' | 'security' | 'billing' | 'team' | 'logs';
 
+// Mock Plans Data
+const PLANS = [
+    { id: 'Free', price: 0, features: ['Up to 100 Patients', 'Basic Appointments', '1 User Account', 'Community Support'] },
+    { id: 'Pro', price: 5000, features: ['Unlimited Patients', 'SMS Reminders', 'Up to 5 Users', 'Inventory Management', 'Priority Support'], recommended: true },
+    { id: 'Enterprise', price: 15000, features: ['Unlimited Everything', 'Dedicated Account Manager', 'Custom API Integrations', 'Multi-branch Support', 'Audit Logs'] }
+];
+
 const Settings: React.FC<SettingsProps> = ({ isDarkMode, toggleTheme, settings, updateSettings }) => {
   const [activeTab, setActiveTab] = useState<Tab>('general');
   const [formData, setFormData] = useState<ClinicSettings>(settings);
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   
   // Modals
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  
+  // -- Billing & Subscription State --
+  const [showPricingModal, setShowPricingModal] = useState(false);
+  const [showSMSModal, setShowSMSModal] = useState(false);
+  const [showCheckout, setShowCheckout] = useState(false);
+  
+  // Checkout Context
+  const [checkoutItem, setCheckoutItem] = useState<{ type: 'Plan' | 'Credits', name: string, amount: number, detail?: string } | null>(null);
+  const [paymentStep, setPaymentStep] = useState<'review' | 'processing' | 'success'>('review');
+  const [processingStatus, setProcessingStatus] = useState('');
+  
+  // SMS Purchase State
+  const [smsCreditsToBuy, setSmsCreditsToBuy] = useState(1000);
 
   // Invite Form
   const [inviteForm, setInviteForm] = useState({ name: '', email: '', role: 'Doctor' as Role });
@@ -88,6 +110,126 @@ const Settings: React.FC<SettingsProps> = ({ isDarkMode, toggleTheme, settings, 
           };
           reader.readAsDataURL(file);
       }
+  };
+
+  const handleExportData = () => {
+      setIsExporting(true);
+      setTimeout(() => {
+          const data = {
+              settings: formData,
+              timestamp: new Date().toISOString(),
+              version: '1.0',
+              localData: localStorage 
+          };
+          
+          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `juaafya_backup_${new Date().toISOString().split('T')[0]}.json`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setIsExporting(false);
+      }, 1000);
+  };
+
+  const handleDownloadInvoice = (date: string, amount: string) => {
+      const content = `
+      INVOICE #INV-${Math.floor(Math.random() * 10000)}
+      Date: ${date}
+      Status: PAID
+      
+      Bill To: ${formData.name}
+      Amount: ${amount}
+      
+      --------------------------------
+      Description          Amount
+      --------------------------------
+      JuaAfya Subscription ${amount}
+      --------------------------------
+      Total                ${amount}
+      `;
+      
+      const blob = new Blob([content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Invoice_${date.replace(/ /g, '_')}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+  };
+
+  // -- Billing Handlers --
+
+  const initiatePlanUpgrade = (planId: string, price: number) => {
+      setCheckoutItem({
+          type: 'Plan',
+          name: `${planId} Plan Subscription`,
+          amount: price,
+          detail: 'Monthly recurring billing'
+      });
+      setShowPricingModal(false);
+      setPaymentStep('review');
+      setShowCheckout(true);
+  };
+
+  const initiateSmsPurchase = () => {
+      const cost = Math.round(smsCreditsToBuy * 1.5); // 1.5 KSh per SMS
+      setCheckoutItem({
+          type: 'Credits',
+          name: `${smsCreditsToBuy.toLocaleString()} SMS Credits`,
+          amount: cost,
+          detail: 'One-time purchase'
+      });
+      setShowSMSModal(false);
+      setPaymentStep('review');
+      setShowCheckout(true);
+  };
+
+  const processPayment = () => {
+      setPaymentStep('processing');
+      setProcessingStatus('Initiating M-Pesa Request...');
+      
+      setTimeout(() => {
+          setProcessingStatus(`Sending STK Push to ${formData.billing.paymentMethod.type === 'M-Pesa' ? 'registered phone' : 'phone'}...`);
+      }, 1500);
+
+      setTimeout(() => {
+          setProcessingStatus('Waiting for PIN input...');
+      }, 3000);
+
+      setTimeout(() => {
+          setProcessingStatus('Confirming transaction...');
+      }, 5000);
+
+      setTimeout(() => {
+          // Success! Update State
+          if (checkoutItem?.type === 'Plan') {
+              const planName = checkoutItem.name.split(' ')[0];
+              const nextDate = new Date();
+              nextDate.setMonth(nextDate.getMonth() + 1);
+              
+              setFormData(prev => ({
+                  ...prev,
+                  billing: {
+                      ...prev.billing,
+                      plan: planName as any,
+                      nextBillingDate: nextDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                  }
+              }));
+              updateSettings({ // Persist immediately
+                  ...formData,
+                  billing: {
+                      ...formData.billing,
+                      plan: planName as any,
+                      nextBillingDate: nextDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                  }
+              });
+          }
+          setPaymentStep('success');
+      }, 7000);
   };
 
   // -- Team Logic --
@@ -206,8 +348,13 @@ const Settings: React.FC<SettingsProps> = ({ isDarkMode, toggleTheme, settings, 
                 <Database className="w-5 h-5 text-slate-500" /> Data Management
             </h3>
             <div className="flex flex-col sm:flex-row gap-4">
-                <button className="flex items-center justify-center gap-2 px-4 py-3 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-white font-medium rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors flex-1">
-                    <Download className="w-4 h-4" /> Export All Data
+                <button 
+                    onClick={handleExportData}
+                    disabled={isExporting}
+                    className="flex items-center justify-center gap-2 px-4 py-3 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-white font-medium rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors flex-1 disabled:opacity-50"
+                >
+                    {isExporting ? <Loader2 className="w-4 h-4 animate-spin"/> : <Download className="w-4 h-4" />} 
+                    Export All Data
                 </button>
                 <button className="flex items-center justify-center gap-2 px-4 py-3 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-white font-medium rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors flex-1">
                     <RefreshCw className="w-4 h-4" /> Sync Offline Data
@@ -221,7 +368,10 @@ const Settings: React.FC<SettingsProps> = ({ isDarkMode, toggleTheme, settings, 
                         <p className="text-sm font-bold text-red-700 dark:text-red-400">Delete Clinic Account</p>
                         <p className="text-xs text-red-600/70 dark:text-red-400/70 mt-1">Permanently remove all patients, appointments, and data.</p>
                     </div>
-                    <button className="px-4 py-2 bg-white dark:bg-red-900/50 text-red-600 dark:text-red-300 font-bold text-xs border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-50 dark:hover:bg-red-900 transition-colors whitespace-nowrap">
+                    <button 
+                        onClick={() => alert('This feature is disabled for the demo.')}
+                        className="px-4 py-2 bg-white dark:bg-red-900/50 text-red-600 dark:text-red-300 font-bold text-xs border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-50 dark:hover:bg-red-900 transition-colors whitespace-nowrap"
+                    >
                         Delete Account
                     </button>
                 </div>
@@ -561,7 +711,10 @@ const Settings: React.FC<SettingsProps> = ({ isDarkMode, toggleTheme, settings, 
     );
   };
 
-  const renderBilling = () => (
+  const renderBilling = () => {
+      const currentPlanDetails = PLANS.find(p => p.id === formData.billing.plan) || PLANS[0];
+
+      return (
       <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
            {/* Current Plan */}
            <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-8 rounded-3xl shadow-lg relative overflow-hidden">
@@ -576,7 +729,7 @@ const Settings: React.FC<SettingsProps> = ({ isDarkMode, toggleTheme, settings, 
                        <p className="text-slate-400 text-sm mt-2">Next billing date: {formData.billing.nextBillingDate}</p>
                    </div>
                    <div className="text-right">
-                       <div className="text-3xl font-bold">KSh 5,000</div>
+                       <div className="text-3xl font-bold">KSh {currentPlanDetails.price.toLocaleString()}</div>
                        <div className="text-slate-400 text-sm">/ month</div>
                    </div>
                </div>
@@ -592,8 +745,8 @@ const Settings: React.FC<SettingsProps> = ({ isDarkMode, toggleTheme, settings, 
                </div>
                
                <div className="mt-6 pt-6 border-t border-white/10 relative z-10 flex gap-3">
-                   <button className="px-4 py-2 bg-white text-slate-900 font-bold rounded-lg text-sm hover:bg-slate-100 transition-colors">Change Plan</button>
-                   <button className="px-4 py-2 bg-transparent border border-white/20 text-white font-bold rounded-lg text-sm hover:bg-white/10 transition-colors">Buy SMS Credits</button>
+                   <button onClick={() => setShowPricingModal(true)} className="px-4 py-2 bg-white text-slate-900 font-bold rounded-lg text-sm hover:bg-slate-100 transition-colors">Change Plan</button>
+                   <button onClick={() => setShowSMSModal(true)} className="px-4 py-2 bg-transparent border border-white/20 text-white font-bold rounded-lg text-sm hover:bg-white/10 transition-colors">Buy SMS Credits</button>
                </div>
            </div>
 
@@ -637,14 +790,22 @@ const Settings: React.FC<SettingsProps> = ({ isDarkMode, toggleTheme, settings, 
                                    <Receipt className="w-4 h-4 text-slate-400" />
                                    <span className="text-slate-700 dark:text-slate-300">{inv.date}</span>
                                </div>
-                               <span className="font-medium text-slate-900 dark:text-white">{inv.amount}</span>
+                               <div className="flex items-center gap-4">
+                                   <span className="font-medium text-slate-900 dark:text-white">{inv.amount}</span>
+                                   <button 
+                                        onClick={() => handleDownloadInvoice(inv.date, inv.amount)}
+                                        className="text-slate-400 hover:text-teal-600 transition-colors" title="Download"
+                                    >
+                                       <Download className="w-4 h-4" />
+                                   </button>
+                               </div>
                            </div>
                        ))}
                    </div>
                </div>
            </div>
 
-           {/* Payment Modal */}
+           {/* Payment Method Modal */}
            {showPaymentModal && (
               <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
                   <div className="bg-white dark:bg-slate-800 w-full max-w-md rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
@@ -688,6 +849,171 @@ const Settings: React.FC<SettingsProps> = ({ isDarkMode, toggleTheme, settings, 
               </div>
            )}
       </div>
+      );
+  };
+
+  // --- NEW: Pricing Modal ---
+  const renderPricingModal = () => (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white dark:bg-slate-800 w-full max-w-5xl rounded-3xl shadow-2xl p-8 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-8">
+                    <div>
+                        <h2 className="text-3xl font-bold text-slate-900 dark:text-white">Choose Your Plan</h2>
+                        <p className="text-slate-500 dark:text-slate-400 mt-1">Scale your clinic with features that fit your needs.</p>
+                    </div>
+                    <button onClick={() => setShowPricingModal(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors"><X className="w-6 h-6 text-slate-400" /></button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {PLANS.map(plan => {
+                        const isCurrent = formData.billing.plan === plan.id;
+                        return (
+                            <div key={plan.id} className={`relative p-6 rounded-2xl border-2 transition-all hover:scale-105 duration-300 ${isCurrent ? 'border-teal-500 bg-teal-50/50 dark:bg-teal-900/10' : plan.recommended ? 'border-indigo-500 shadow-xl' : 'border-slate-200 dark:border-slate-700'}`}>
+                                {plan.recommended && !isCurrent && <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-indigo-600 text-white px-3 py-1 rounded-full text-xs font-bold uppercase">Recommended</div>}
+                                {isCurrent && <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-teal-600 text-white px-3 py-1 rounded-full text-xs font-bold uppercase">Current Plan</div>}
+                                
+                                <h3 className="text-xl font-bold text-slate-900 dark:text-white">{plan.id}</h3>
+                                <div className="mt-2 mb-6">
+                                    <span className="text-3xl font-bold text-slate-900 dark:text-white">KSh {plan.price.toLocaleString()}</span>
+                                    <span className="text-slate-500 dark:text-slate-400 text-sm"> / month</span>
+                                </div>
+                                <ul className="space-y-3 mb-8">
+                                    {plan.features.map((feat, i) => (
+                                        <li key={i} className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                                            <Check className="w-4 h-4 text-green-500" /> {feat}
+                                        </li>
+                                    ))}
+                                </ul>
+                                <button 
+                                    onClick={() => initiatePlanUpgrade(plan.id, plan.price)}
+                                    disabled={isCurrent}
+                                    className={`w-full py-3 rounded-xl font-bold transition-colors ${
+                                        isCurrent 
+                                        ? 'bg-slate-200 dark:bg-slate-700 text-slate-500 cursor-not-allowed' 
+                                        : plan.recommended 
+                                            ? 'bg-indigo-600 text-white hover:bg-indigo-700' 
+                                            : 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90'
+                                    }`}
+                                >
+                                    {isCurrent ? 'Active Plan' : plan.price > 0 ? 'Upgrade Now' : 'Downgrade'}
+                                </button>
+                            </div>
+                        );
+                    })}
+                </div>
+          </div>
+      </div>
+  );
+
+  // --- NEW: SMS Bundle Modal ---
+  const renderSMSModal = () => (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white dark:bg-slate-800 w-full max-w-lg rounded-3xl shadow-2xl p-8 animate-in zoom-in-95">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <Smartphone className="w-6 h-6 text-green-600" /> Buy SMS Credits
+                    </h2>
+                    <button onClick={() => setShowSMSModal(false)}><X className="w-6 h-6 text-slate-400" /></button>
+                </div>
+                
+                <div className="bg-slate-50 dark:bg-slate-700/30 p-6 rounded-2xl mb-6">
+                    <p className="text-center text-slate-500 dark:text-slate-400 text-sm mb-4">Drag to choose bundle size</p>
+                    <input 
+                        type="range" min="500" max="10000" step="500" 
+                        value={smsCreditsToBuy} 
+                        onChange={(e) => setSmsCreditsToBuy(parseInt(e.target.value))}
+                        className="w-full h-2 bg-slate-200 dark:bg-slate-600 rounded-lg appearance-none cursor-pointer accent-green-600"
+                    />
+                    <div className="flex justify-between mt-2 text-xs font-bold text-slate-400 uppercase">
+                        <span>500 SMS</span>
+                        <span>10,000 SMS</span>
+                    </div>
+                </div>
+
+                <div className="flex justify-between items-center mb-8 p-4 border border-green-200 dark:border-green-900 bg-green-50 dark:bg-green-900/10 rounded-xl">
+                    <div>
+                        <div className="text-3xl font-bold text-slate-900 dark:text-white">{smsCreditsToBuy.toLocaleString()}</div>
+                        <div className="text-xs text-green-600 font-bold uppercase">Credits</div>
+                    </div>
+                    <div className="text-right">
+                        <div className="text-xl font-bold text-slate-900 dark:text-white">KSh {(smsCreditsToBuy * 1.5).toLocaleString()}</div>
+                        <div className="text-xs text-slate-500">@ 1.50 / SMS</div>
+                    </div>
+                </div>
+
+                <button 
+                    onClick={initiateSmsPurchase}
+                    className="w-full py-4 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 shadow-lg shadow-green-200 dark:shadow-none transition-colors flex items-center justify-center gap-2"
+                >
+                    Proceed to Payment <ArrowRight className="w-5 h-5" />
+                </button>
+          </div>
+      </div>
+  );
+
+  // --- NEW: Payment Simulation Modal ---
+  const renderCheckout = () => (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white dark:bg-slate-800 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95">
+              {paymentStep === 'review' && checkoutItem && (
+                  <div className="p-6">
+                      <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6">Confirm Payment</h3>
+                      <div className="space-y-4 mb-6">
+                          <div className="flex justify-between text-sm">
+                              <span className="text-slate-500 dark:text-slate-400">{checkoutItem.name}</span>
+                              <span className="font-bold dark:text-white">{checkoutItem.amount.toLocaleString()}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                              <span className="text-slate-500 dark:text-slate-400">Tax (16% VAT)</span>
+                              <span className="font-bold dark:text-white">{(checkoutItem.amount * 0.16).toLocaleString()}</span>
+                          </div>
+                          <div className="border-t border-slate-100 dark:border-slate-700 pt-4 flex justify-between text-lg font-bold text-slate-900 dark:text-white">
+                              <span>Total</span>
+                              <span>KSh {(checkoutItem.amount * 1.16).toLocaleString()}</span>
+                          </div>
+                      </div>
+                      
+                      <div className="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-xl mb-6 flex items-center gap-3">
+                          <div className="p-2 bg-white dark:bg-slate-600 rounded shadow-sm">
+                              {formData.billing.paymentMethod.type === 'M-Pesa' ? <Smartphone className="w-5 h-5 text-green-600" /> : <CreditCard className="w-5 h-5 text-indigo-600" />}
+                          </div>
+                          <div className="flex-1">
+                              <div className="text-xs text-slate-500 uppercase font-bold">Pay with</div>
+                              <div className="text-sm font-bold dark:text-white">{formData.billing.paymentMethod.type} •••• {formData.billing.paymentMethod.last4}</div>
+                          </div>
+                          <button onClick={() => { setShowPaymentModal(true); setShowCheckout(false); }} className="text-xs text-teal-600 font-bold hover:underline">Change</button>
+                      </div>
+
+                      <div className="flex gap-3">
+                          <button onClick={() => setShowCheckout(false)} className="flex-1 py-3 font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors">Cancel</button>
+                          <button onClick={processPayment} className="flex-1 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold rounded-xl hover:opacity-90 transition-opacity">Pay Now</button>
+                      </div>
+                  </div>
+              )}
+
+              {paymentStep === 'processing' && (
+                  <div className="p-12 flex flex-col items-center text-center">
+                      <div className="relative w-20 h-20 mb-6">
+                          <div className="absolute inset-0 border-4 border-slate-100 dark:border-slate-700 rounded-full"></div>
+                          <div className="absolute inset-0 border-4 border-teal-500 rounded-full border-t-transparent animate-spin"></div>
+                      </div>
+                      <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Processing Payment</h3>
+                      <p className="text-slate-500 dark:text-slate-400 text-sm animate-pulse">{processingStatus}</p>
+                  </div>
+              )}
+
+              {paymentStep === 'success' && (
+                  <div className="p-8 flex flex-col items-center text-center animate-in zoom-in">
+                      <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 text-green-600 rounded-full flex items-center justify-center mb-6">
+                          <Check className="w-10 h-10" />
+                      </div>
+                      <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Success!</h3>
+                      <p className="text-slate-500 dark:text-slate-400 mb-8">Your transaction has been processed successfully.</p>
+                      <button onClick={() => { setShowCheckout(false); setShowPricingModal(false); }} className="w-full py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold rounded-xl">Done</button>
+                  </div>
+              )}
+          </div>
+      </div>
   );
 
   return (
@@ -728,49 +1054,50 @@ const Settings: React.FC<SettingsProps> = ({ isDarkMode, toggleTheme, settings, 
                         onClick={() => setActiveTab(item.id as Tab)}
                         className={`w-full text-left px-4 py-3.5 font-medium rounded-xl flex items-center justify-between transition-all duration-200 ${
                             activeTab === item.id 
-                            ? 'bg-white dark:bg-slate-800 text-teal-700 dark:text-teal-400 shadow-md ring-1 ring-slate-100 dark:ring-slate-700' 
-                            : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                            ? 'bg-white dark:bg-slate-800 text-teal-700 dark:text-teal-400 shadow-md ring-1 ring-slate-100 dark:ring-slate-700'
+                            : 'text-slate-500 hover:bg-white/50 dark:text-slate-400 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
                         }`}
                     >
                         <div className="flex items-center gap-3">
                             <item.icon className={`w-5 h-5 ${activeTab === item.id ? 'text-teal-600 dark:text-teal-400' : 'text-slate-400'}`} />
-                            <span>{item.label}</span>
+                            {item.label}
                         </div>
-                        {activeTab === item.id && <ChevronRight className="w-4 h-4 text-teal-500" />}
+                        {activeTab === item.id && <ChevronRight className="w-4 h-4 text-teal-600 dark:text-teal-400" />}
                     </button>
                 ))}
-                
-                <div className="pt-6 mt-6 border-t border-slate-200 dark:border-slate-800">
-                    <div className="px-4 py-2">
-                         <div className="flex items-center gap-3">
-                            <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl text-indigo-600 dark:text-indigo-400">
-                                {isDarkMode ? <Moon className="w-5 h-5"/> : <Sun className="w-5 h-5"/>}
-                            </div>
-                            <div className="flex-1">
-                                <div className="font-bold text-slate-900 dark:text-white text-sm">Dark Mode</div>
-                                <div className="text-xs text-slate-500">Adjust appearance</div>
-                            </div>
-                            <button 
-                                onClick={toggleTheme}
-                                className={`w-10 h-6 rounded-full relative transition-colors duration-200 ${isDarkMode ? 'bg-indigo-600' : 'bg-slate-300'}`}
-                            >
-                                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform duration-200 shadow-sm ${isDarkMode ? 'left-5' : 'left-1'}`}></div>
-                            </button>
+
+                {/* Theme Toggle in Sidebar */}
+                <div className="pt-4 mt-4 border-t border-slate-200 dark:border-slate-700">
+                    <button 
+                        onClick={toggleTheme}
+                        className="w-full flex items-center justify-between p-4 bg-slate-100 dark:bg-slate-800 rounded-xl text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                    >
+                        <div className="flex items-center gap-3">
+                            {isDarkMode ? <Moon className="w-5 h-5 text-indigo-400" /> : <Sun className="w-5 h-5 text-amber-500" />}
+                            {isDarkMode ? 'Dark Mode' : 'Light Mode'}
                         </div>
-                    </div>
+                        <div className={`w-10 h-6 rounded-full relative transition-colors ${isDarkMode ? 'bg-indigo-600' : 'bg-slate-300'}`}>
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${isDarkMode ? 'left-5' : 'left-1'}`}></div>
+                        </div>
+                    </button>
                 </div>
             </div>
 
-            {/* Main Settings Panel */}
+            {/* Main Content Area */}
             <div className="lg:col-span-9">
                 {activeTab === 'general' && renderGeneral()}
-                {activeTab === 'team' && renderTeam()}
                 {activeTab === 'notifications' && renderNotifications()}
                 {activeTab === 'security' && renderSecurity()}
                 {activeTab === 'billing' && renderBilling()}
+                {activeTab === 'team' && renderTeam()}
                 {activeTab === 'logs' && renderLogs()}
             </div>
         </div>
+
+        {/* Global Modals for Billing */}
+        {showPricingModal && renderPricingModal()}
+        {showSMSModal && renderSMSModal()}
+        {showCheckout && renderCheckout()}
     </div>
   );
 };
