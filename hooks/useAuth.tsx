@@ -29,14 +29,10 @@ export const AuthContext = createContext<AuthContextType | null>(null);
 
 /**
  * Custom hook to use authentication context
+ * Returns null if used outside of AuthProvider (fallback to app's current system)
  */
-export const useAuth = (): AuthContextType => {
+export const useAuth = (): AuthContextType | null => {
   const context = useContext(AuthContext);
-  
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  
   return context;
 };
 
