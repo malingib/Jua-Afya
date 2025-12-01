@@ -1,3 +1,4 @@
+
 // Mobiwave SMS Integration Service
 
 // API Configuration from documentation
@@ -8,30 +9,15 @@ const DEFAULT_SENDER_ID = 'MOBIWAVE'; // Alphanumeric sender ID
 export interface SmsResponse {
   status: 'success' | 'error';
   message?: string;
-  data?: {
-    message_id?: string;
-    status?: string;
-    timestamp?: string;
-  };
-}
-
-export interface SmsSendRequest {
-  recipient: string;
-  sender_id: string;
-  type: 'plain';
-  message: string;
+  data?: any;
 }
 
 /**
  * Sends an SMS using Mobiwave SMS API.
  * @param recipient Phone number (e.g. +254712345678)
  * @param message Text message content
- * @returns Promise<SmsResponse> Response with status and optional data
  */
-export const sendSms = async (
-  recipient: string,
-  message: string
-): Promise<SmsResponse> => {
+export const sendSms = async (recipient: string, message: string): Promise<SmsResponse> => {
   if (!API_TOKEN) {
     console.warn("SMS_API_KEY is missing. SMS functionality will be simulated or fail.");
     return { status: 'error', message: 'SMS configuration missing (API Key).' };

@@ -29,7 +29,6 @@ const PatientQueue: React.FC<PatientQueueProps> = ({ visits, patients, inventory
   
   // Check-In State
   const [checkInPriority, setCheckInPriority] = useState<VisitPriority>('Normal');
-  const [checkInInsurance, setCheckInInsurance] = useState({ hasInsurance: false, provider: 'NHIF/SHIF', number: '' });
   const [skipVitals, setSkipVitals] = useState(false);
 
   // Doctor Modal State
@@ -105,7 +104,7 @@ const PatientQueue: React.FC<PatientQueueProps> = ({ visits, patients, inventory
       return 'bg-blue-50 text-blue-700 border-blue-200';
   };
 
-  // --- Render Modals --- (Same logic, slightly compacted for brevity in update)
+  // --- Render Modals ---
   const renderCheckInModal = () => (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
         <div className="bg-white dark:bg-slate-800 w-full max-w-lg rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
@@ -125,31 +124,17 @@ const PatientQueue: React.FC<PatientQueueProps> = ({ visits, patients, inventory
                 />
             </div>
 
-            <div className="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Visit Priority</label>
-                    <select 
-                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-700 rounded-xl outline-none dark:text-white text-sm font-medium"
-                        value={checkInPriority}
-                        onChange={(e) => setCheckInPriority(e.target.value as VisitPriority)}
-                    >
-                        <option value="Normal">Normal</option>
-                        <option value="Urgent">Urgent</option>
-                        <option value="Emergency">Emergency</option>
-                    </select>
-                </div>
-                <div>
-                     <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Insurance</label>
-                     <div className="flex items-center gap-2 mt-2">
-                        <input 
-                            type="checkbox" 
-                            checked={checkInInsurance.hasInsurance}
-                            onChange={(e) => setCheckInInsurance({...checkInInsurance, hasInsurance: e.target.checked})}
-                            className="w-4 h-4 text-teal-600 rounded"
-                        />
-                        <span className="text-sm dark:text-slate-300">Coverage?</span>
-                     </div>
-                </div>
+            <div className="mb-4">
+                <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Visit Priority</label>
+                <select 
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-700 rounded-xl outline-none dark:text-white text-sm font-medium"
+                    value={checkInPriority}
+                    onChange={(e) => setCheckInPriority(e.target.value as VisitPriority)}
+                >
+                    <option value="Normal">Normal</option>
+                    <option value="Urgent">Urgent</option>
+                    <option value="Emergency">Emergency</option>
+                </select>
             </div>
 
             <div className="mb-6 bg-slate-50 dark:bg-slate-700/50 p-3 rounded-xl flex items-center gap-3">
@@ -165,23 +150,6 @@ const PatientQueue: React.FC<PatientQueueProps> = ({ visits, patients, inventory
                  </label>
             </div>
 
-            {checkInInsurance.hasInsurance && (
-                <div className="grid grid-cols-2 gap-4 mb-6 bg-slate-50 dark:bg-slate-700/50 p-3 rounded-xl animate-in fade-in">
-                    <input 
-                        placeholder="Provider (e.g. SHIF)" 
-                        className="p-2 bg-white dark:bg-slate-800 rounded-lg text-sm outline-none dark:text-white border border-slate-200 dark:border-slate-600"
-                        value={checkInInsurance.provider}
-                        onChange={(e) => setCheckInInsurance({...checkInInsurance, provider: e.target.value})}
-                    />
-                    <input 
-                        placeholder="Member Number" 
-                        className="p-2 bg-white dark:bg-slate-800 rounded-lg text-sm outline-none dark:text-white border border-slate-200 dark:border-slate-600"
-                        value={checkInInsurance.number}
-                        onChange={(e) => setCheckInInsurance({...checkInInsurance, number: e.target.value})}
-                    />
-                </div>
-            )}
-
             <div className="max-h-48 overflow-y-auto space-y-2 border-t border-slate-100 dark:border-slate-700 pt-4">
                 <p className="text-xs font-bold text-slate-400 mb-2">Select Patient to Queue:</p>
                 {patients
@@ -193,7 +161,7 @@ const PatientQueue: React.FC<PatientQueueProps> = ({ visits, patients, inventory
                                 addVisit(
                                     patient.id, 
                                     checkInPriority, 
-                                    checkInInsurance.hasInsurance ? { provider: checkInInsurance.provider, memberNumber: checkInInsurance.number } : undefined,
+                                    undefined, // No insurance passed
                                     skipVitals
                                 ); 
                                 setShowCheckInModal(false); 

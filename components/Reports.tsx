@@ -8,7 +8,7 @@ import {
   Download, Calendar, ChevronDown, TrendingUp, TrendingDown, 
   DollarSign, Users, Activity, FileText, Filter, Printer, 
   Loader2, Sparkles, Smartphone, CreditCard, ShieldCheck, Clock, X, Search,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, Banknote
 } from 'lucide-react';
 
 type TimeRange = '7D' | '30D' | '3M' | '1Y';
@@ -20,7 +20,6 @@ const COLORS = {
   danger: '#ef4444', // Red 500
   success: '#10b981', // Emerald 500
   mpesa: '#16a34a', // Green 600
-  shif: '#6366f1', // Indigo 500
   cash: '#64748b', // Slate 500
   slate: '#94a3b8',
 };
@@ -85,11 +84,10 @@ const Reports: React.FC = () => {
 
   const paymentMethodData = useMemo(() => {
     // Dynamically shift percentages based on time range to simulate changing trends
-    const mpesaBase = timeRange === '7D' ? 65 : 55;
+    const mpesaBase = timeRange === '7D' ? 70 : 60;
     return [
       { name: 'M-Pesa', value: mpesaBase, color: COLORS.mpesa },
-      { name: 'Cash', value: 90 - mpesaBase, color: COLORS.cash },
-      { name: 'SHIF / Insurance', value: 10, color: COLORS.shif },
+      { name: 'Cash', value: 100 - mpesaBase, color: COLORS.cash },
     ];
   }, [timeRange]);
 
@@ -99,8 +97,8 @@ const Reports: React.FC = () => {
       { name: 'Malaria', count: Math.floor(185 * scale * (0.8 + Math.random()*0.4)), color: COLORS.secondary }, 
       { name: 'Typhoid', count: Math.floor(120 * scale * (0.8 + Math.random()*0.4)), color: COLORS.danger }, 
       { name: 'Respiratory', count: Math.floor(90 * scale * (0.8 + Math.random()*0.4)), color: COLORS.success }, 
-      { name: 'Gastroenteritis', count: Math.floor(65 * scale * (0.8 + Math.random()*0.4)), color: COLORS.shif }, 
-      { name: 'Hypertension', count: Math.floor(45 * scale * (0.8 + Math.random()*0.4)), color: COLORS.primary }, 
+      { name: 'Gastroenteritis', count: Math.floor(65 * scale * (0.8 + Math.random()*0.4)), color: COLORS.primary }, 
+      { name: 'Hypertension', count: Math.floor(45 * scale * (0.8 + Math.random()*0.4)), color: COLORS.cash }, 
     ];
   }, [timeRange]);
 
@@ -118,7 +116,7 @@ const Reports: React.FC = () => {
     const data = [];
     
     if (activeTab === 'financial') {
-        const methods = ['M-Pesa', 'Cash', 'SHIF'];
+        const methods = ['M-Pesa', 'Cash'];
         const types = ['Consultation', 'Lab Test', 'Pharmacy', 'Procedure'];
         for(let i=0; i<count; i++) {
             data.push({
@@ -287,12 +285,14 @@ const Reports: React.FC = () => {
             <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
                 <div className="flex justify-between items-start">
                     <div>
-                        <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Pending SHIF Claims</p>
-                        <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">KSh 45,000</h3>
+                        <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Cash Collections</p>
+                        <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
+                            KSh {(financialData.reduce((acc, curr) => acc + curr.revenue, 0) * (paymentMethodData[1].value / 100) | 0).toLocaleString()}
+                        </h3>
                     </div>
-                    <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 rounded-lg"><ShieldCheck className="w-5 h-5"/></div>
+                    <div className="p-2 bg-slate-100 dark:bg-slate-700 text-slate-600 rounded-lg"><Banknote className="w-5 h-5"/></div>
                 </div>
-                <div className="mt-4 flex items-center text-sm text-amber-600 font-medium"><span className="mr-1">● 5</span> claims processing</div>
+                <div className="mt-4 flex items-center text-sm text-slate-500 font-medium"><span className="mr-1">●</span> Stable</div>
             </div>
         </div>
 

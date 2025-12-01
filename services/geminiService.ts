@@ -1,28 +1,8 @@
+
 import { GoogleGenAI, Chat } from "@google/genai";
 
 const apiKey = process.env.API_KEY || '';
-
-/**
- * Response Types for Gemini API
- */
-export interface GeminiResponse {
-  type: 'success' | 'error';
-  text: string;
-  usage?: {
-    input_tokens: number;
-    output_tokens: number;
-  };
-}
-
-export interface SoapAnalysis {
-  subjective?: string;
-  objective?: string;
-  assessment?: string;
-  plan?: string;
-  error?: string;
-}
-
-// Initialize Gemini
+// Initialize.
 const ai = new GoogleGenAI({ apiKey });
 
 // Helper to check if key is present
@@ -31,8 +11,6 @@ export const hasApiKey = () => !!apiKey;
 /**
  * Summarizes patient notes or converts unstructured notes into SOAP format.
  * Uses gemini-2.5-flash for speed.
- * @param notes Patient notes to analyze
- * @returns Promise<string> SOAP formatted analysis or error message
  */
 export const analyzePatientNotes = async (notes: string): Promise<string> => {
   if (!apiKey) return "API Key missing.";
@@ -56,16 +34,8 @@ export const analyzePatientNotes = async (notes: string): Promise<string> => {
 /**
  * Generates a short, friendly SMS reminder for a patient.
  * Uses gemini-2.5-flash.
- * @param patientName Patient's name
- * @param date Appointment date
- * @param reason Appointment reason
- * @returns Promise<string> SMS message content
  */
-export const draftAppointmentSms = async (
-  patientName: string,
-  date: string,
-  reason: string
-): Promise<string> => {
+export const draftAppointmentSms = async (patientName: string, date: string, reason: string): Promise<string> => {
   if (!apiKey) return "API Key missing.";
 
   try {
@@ -87,9 +57,6 @@ export const draftAppointmentSms = async (
 /**
  * Generates marketing or general broadcast SMS content.
  * Uses gemini-2.5-flash.
- * @param topic Campaign topic
- * @param tone Tone of message (Professional, Urgent, Friendly, Educational)
- * @returns Promise<string> Campaign message content
  */
 export const draftCampaignMessage = async (topic: string, tone: string): Promise<string> => {
     if (!apiKey) return "API Key missing.";
@@ -114,14 +81,10 @@ export const draftCampaignMessage = async (topic: string, tone: string): Promise
 /**
  * Generates a daily executive summary for the doctor based on stats.
  * Uses gemini-2.5-flash.
- * @param appointmentCount Number of appointments for the day
- * @param lowStockCount Number of low stock items
- * @param revenueEstimate Estimated revenue
- * @returns Promise<string> Daily briefing text
  */
 export const generateDailyBriefing = async (
-  appointmentCount: number,
-  lowStockCount: number,
+  appointmentCount: number, 
+  lowStockCount: number, 
   revenueEstimate: string
 ): Promise<string> => {
   if (!apiKey) return "Welcome, Daktari. System ready.";
@@ -224,11 +187,10 @@ export const getStaffAssistantResponse = async (
 /**
  * Chatbot initialization.
  * Uses gemini-3-pro-preview for complex reasoning.
- * @returns Chat session instance or null if API key not configured
  */
 let chatSession: Chat | null = null;
 
-export const getChatSession = (): Chat | null => {
+export const getChatSession = () => {
   if (!apiKey) return null;
   
   if (!chatSession) {
@@ -242,11 +204,6 @@ export const getChatSession = (): Chat | null => {
   return chatSession;
 };
 
-/**
- * Send a message to the AI chatbot and get a response
- * @param message User message
- * @returns Promise<string> Assistant response or error message
- */
 export const sendMessageToChat = async (message: string): Promise<string> => {
   const chat = getChatSession();
   if (!chat) return "API Key is missing or service unavailable.";
