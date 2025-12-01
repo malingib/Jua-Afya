@@ -3,6 +3,7 @@
 
 
 
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { InventoryItem, Supplier, InventoryLog, Visit } from '../types';
 import { 
@@ -228,14 +229,19 @@ const Pharmacy: React.FC<PharmacyProps> = ({
     e.preventDefault();
     if (!newItemForm.name) return;
 
+    // Safety checks for numerical values
+    const safeStock = Math.max(0, parseInt(newItemForm.stock) || 0);
+    const safeMinStock = Math.max(0, parseInt(newItemForm.minStockLevel) || 0);
+    const safePrice = Math.max(0, parseFloat(newItemForm.price) || 0);
+
     const newItemData: InventoryItem = {
         id: editingItem ? editingItem.id : Date.now().toString(),
         name: newItemForm.name,
         category: newItemForm.category as any,
-        stock: Number(newItemForm.stock),
-        minStockLevel: Number(newItemForm.minStockLevel),
+        stock: safeStock,
+        minStockLevel: safeMinStock,
         unit: newItemForm.unit,
-        price: Number(newItemForm.price),
+        price: safePrice,
         batchNumber: newItemForm.batchNumber,
         expiryDate: newItemForm.expiryDate,
         supplierId: newItemForm.supplierId

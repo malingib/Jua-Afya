@@ -110,46 +110,77 @@ export const generateDailyBriefing = async (
 /**
  * Staff WhatsApp Agent Response
  * Generates response for clinic staff based on system data context.
+ * Returns structured JSON to support actions (Add/Edit/Delete).
  */
 export const getStaffAssistantResponse = async (
     userQuery: string,
     context: any // Object containing full system data
-): Promise<string> => {
-    if (!apiKey) return "API Key missing. Cannot process request.";
+): Promise<any> => {
+    if (!apiKey) return { reply: "API Key missing. Cannot process request." };
 
     try {
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
-            contents: `You are the 'JuaAfya Ops Bot', a highly capable and omniscient operational assistant for ${context.clinic?.name || 'the clinic'}.
-            
-            You have FULL ACCESS to the following live clinic data:
-            1. **Clinic Profile**: Name, location, contact info.
-            2. **Team Members**: Names, roles, phone numbers, and status.
-            3. **Appointments**: Full history and upcoming schedule with patient names and reasons.
-            4. **Inventory**: Complete stock list, prices, expiration dates, and suppliers.
-            5. **Patients**: Demographics (Age, Gender), contact info, latest vitals, and notes.
-
-            Current Date: ${context.today}
-            Current User: ${context.user?.name} (${context.user?.role})
+            contents: `You are the 'JuaAfya Ops Bot', a capable assistant for ${context.clinic?.name || 'the clinic'}.
+            You have FULL ACCESS to read and MODIFY the clinic's data.
 
             Current Data Context:
-            ${JSON.stringify(context, null, 2)}
+            - Patients: ${JSON.stringify(context.patients || [])}
+            - Appointments: ${JSON.stringify(context.appointments || [])}
+            - Inventory: ${JSON.stringify(context.inventory || [])}
+            - Today: ${context.today}
 
-            Instructions:
-            1. Answer the user's question accurately using the provided data.
-            2. You can perform complex lookups (e.g., "Who is working today?", "Do we have Paracetamol?", "What is Wanjiku's phone number?", "List all appointments for today").
-            3. If looking for a patient or item, use partial matching (e.g., "Wanjiku" matches "Wanjiku Kamau").
-            4. Be professional but helpful, mimicking a smart WhatsApp bot.
-            5. Use formatting like *bold* for emphasis and emojis (📅, 📦, 👤) to make the text readable.
-            6. If the data is not in the context, politely say you don't have that specific record.
-            
             User Query: "${userQuery}"
+
+            INSTRUCTIONS:
+            1. You must respond in valid JSON format ONLY. Do not include markdown blocks like \`\`\`json.
+            2. Structure: { "reply": "string", "action": { "type": "string", "payload": object } | null }
+            3. If the user asks a question, answer in 'reply' and set 'action' to null.
+            4. If the user wants to ADD, UPDATE, or DELETE data, set the 'action' field.
+            
+            AVAILABLE ACTIONS:
+            - ADD_PATIENT: payload { name, phone, age, gender (Male/Female) }
+            - EDIT_PATIENT: payload { patientId, updates: { name?, phone?, age?, gender?, notes? } }
+            - DELETE_PATIENT: payload { patientId }
+            
+            - ADD_APPOINTMENT: payload { patientId (find closest match or ask), date (YYYY-MM-DD), time (HH:MM), reason }
+            - EDIT_APPOINTMENT: payload { appointmentId, updates: { date?, time?, reason? } }
+            - CANCEL_APPOINTMENT: payload { appointmentId }
+            
+            - UPDATE_STOCK: payload { itemId (preferred) or itemName, newQuantity }
+            - DELETE_ITEM: payload { itemId (preferred) or itemName }
+
+            RULES:
+            - Prioritize brevity in 'reply'. Use bullet points for lists. No emojis.
+            - If details are missing for an action (e.g., patient age), ask the user for them in 'reply' and set 'action' to null.
+            - Infer dates like 'tomorrow' based on ${context.today}.
+            - For EDIT actions, 'updates' object should only contain changed fields.
+            - When updating or deleting, prefer using ID if available in context, otherwise use name.
             `,
+            config: {
+                responseMimeType: "application/json" 
+            }
         });
-        return response.text || "I didn't catch that. Could you try again?";
+        
+        const text = response.text || "{}";
+        
+        // Robust JSON extraction: Find the first { and last }
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        
+        if (jsonMatch) {
+            try {
+                return JSON.parse(jsonMatch[0]);
+            } catch (e) {
+                console.error("JSON Parse Error", e);
+                return { reply: "I understood your request but had trouble formatting the response.", action: null };
+            }
+        } else {
+             return { reply: "System Error: Invalid response format from AI.", action: null };
+        }
+
     } catch (error) {
         console.error("Gemini Staff Agent Error:", error);
-        return "System error: Unable to process request at this time.";
+        return { reply: "System error: Unable to process request at this time." };
     }
 };
 

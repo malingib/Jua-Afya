@@ -14,10 +14,11 @@ interface PatientQueueProps {
   inventory: InventoryItem[];
   addVisit: (patientId: string, priority?: VisitPriority, insurance?: any, skipVitals?: boolean) => void;
   updateVisit: (visit: Visit) => void;
+  onCompleteVisit?: (visit: Visit) => void;
   restrictedStages?: VisitStage[]; // New prop to filter the dashboard view
 }
 
-const PatientQueue: React.FC<PatientQueueProps> = ({ visits, patients, inventory, addVisit, updateVisit, restrictedStages }) => {
+const PatientQueue: React.FC<PatientQueueProps> = ({ visits, patients, inventory, addVisit, updateVisit, onCompleteVisit, restrictedStages }) => {
   // If restricted stages provided, default to the first one, otherwise Check-In
   const [activeStage, setActiveStage] = useState<VisitStage>(restrictedStages ? restrictedStages[0] : 'Check-In');
   const [showCheckInModal, setShowCheckInModal] = useState(false);
@@ -369,6 +370,16 @@ const PatientQueue: React.FC<PatientQueueProps> = ({ visits, patients, inventory
                                         placeholder="e.g. Malaria, URI..."
                                     />
                                 </div>
+                                 <div>
+                                    <label className="text-xs font-bold text-slate-500 uppercase">Detailed Doctor Notes</label>
+                                    <textarea 
+                                        className="w-full p-3 bg-slate-50 dark:bg-slate-700 rounded-xl mt-1 outline-none dark:text-white text-sm"
+                                        rows={4}
+                                        value={selectedVisit.doctorNotes || ''}
+                                        onChange={(e) => setSelectedVisit({...selectedVisit, doctorNotes: e.target.value})}
+                                        placeholder="Clinical observations, examination details..."
+                                    />
+                                </div>
                             </div>
                         )}
 
@@ -391,12 +402,18 @@ const PatientQueue: React.FC<PatientQueueProps> = ({ visits, patients, inventory
                                     </div>
                                     <div className="flex-1 bg-slate-50 dark:bg-slate-700/30 rounded-xl p-3 space-y-2 border border-slate-100 dark:border-slate-700">
                                         {selectedVisit.labOrders.map((order, idx) => (
-                                            <div key={idx} className="bg-white dark:bg-slate-800 p-2 rounded-lg border border-slate-200 dark:border-slate-600 text-sm flex justify-between items-center">
-                                                <div className="font-bold dark:text-white">{order.testName}</div>
-                                                <button onClick={() => {
-                                                    const updated = selectedVisit.labOrders.filter((_, i) => i !== idx);
-                                                    setSelectedVisit({ ...selectedVisit, labOrders: updated });
-                                                }} className="text-red-400 hover:text-red-600"><X className="w-4 h-4"/></button>
+                                            <div key={idx} className="bg-white dark:bg-slate-800 p-2 rounded-lg border border-slate-200 dark:border-slate-600 text-sm">
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <div className="font-bold dark:text-white">{order.testName}</div>
+                                                    <button onClick={() => {
+                                                        const updated = selectedVisit.labOrders.filter((_, i) => i !== idx);
+                                                        setSelectedVisit({ ...selectedVisit, labOrders: updated });
+                                                    }} className="text-red-400 hover:text-red-600"><X className="w-3.5 h-3.5"/></button>
+                                                </div>
+                                                <div className="flex justify-between items-center mt-1">
+                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${order.status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>{order.status}</span>
+                                                    {order.result && <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 max-w-[120px] truncate" title={order.result}>{order.result}</span>}
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
@@ -446,7 +463,7 @@ const PatientQueue: React.FC<PatientQueueProps> = ({ visits, patients, inventory
                             <div className="space-y-4 animate-in fade-in">
                                 {patient && patient.history.map((record, i) => (
                                     <div key={i} className="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-xl border border-slate-100 dark:border-slate-700">
-                                        <p className="text-sm text-slate-600 dark:text-slate-400">{record}</p>
+                                        <p className="text-sm text-slate-600 dark:text-slate-400 whitespace-pre-wrap">{record}</p>
                                     </div>
                                 ))}
                             </div>
@@ -578,7 +595,11 @@ const PatientQueue: React.FC<PatientQueueProps> = ({ visits, patients, inventory
                       <button onClick={() => setSelectedVisit(null)} className="flex-1 py-3 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl">Cancel</button>
                       <button 
                           onClick={() => {
-                              updateVisit({ ...selectedVisit, stage: 'Completed' });
+                              if (onCompleteVisit) {
+                                  onCompleteVisit(selectedVisit);
+                              } else {
+                                  updateVisit({ ...selectedVisit, stage: 'Completed' });
+                              }
                               setSelectedVisit(null);
                           }}
                           className="flex-1 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold rounded-xl hover:opacity-90 flex items-center justify-center gap-2"

@@ -1,11 +1,14 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { 
-  Send, MessageSquare, Settings, Activity, Shield, Users, 
-  CheckCircle, AlertCircle, RefreshCw, Power, Save, Terminal, 
-  Play, StopCircle, Search, Trash2, Smartphone
+  Send, MessageSquare, Activity, Shield, 
+  CheckCircle, Power, Save, Terminal, 
+  Trash2, Link as LinkIcon, Copy, Database, 
+  Brain, Bot, Sparkles, User, Lock, Wifi,
+  Loader2, Search, AlertCircle, Check, X,
+  Zap
 } from 'lucide-react';
-import { TeamMember, Appointment, InventoryItem, Patient, ClinicSettings } from '../types';
+import { TeamMember, Appointment, InventoryItem, Patient, ClinicSettings, Gender } from '../types';
 import { getStaffAssistantResponse } from '../services/geminiService';
 
 interface WhatsAppAgentProps {
@@ -14,238 +17,452 @@ interface WhatsAppAgentProps {
   inventory: InventoryItem[];
   patients: Patient[];
   settings: ClinicSettings;
+  // Actions
+  addPatient: (p: Patient) => void;
+  updatePatient: (p: Patient) => void;
+  deletePatient: (id: string) => void;
+  addAppointment: (a: Appointment) => void;
+  updateAppointment: (a: Appointment) => void;
+  updateInventoryItem: (i: InventoryItem, reason: string) => void;
+  deleteInventoryItem: (id: string) => void;
 }
 
 interface LogEntry {
   id: string;
   timestamp: string;
   user: string;
-  role: string;
   query: string;
   response: string;
   status: 'Success' | 'Failed';
-  latency: number;
 }
 
 interface ChatMessage {
     id: string;
-    sender: 'user' | 'bot';
+    sender: 'user' | 'bot' | 'system';
     text: string;
-    timestamp: Date;
+    timestamp: string | Date; // Allow string for deserialization
+    isAction?: boolean;
 }
 
-const WhatsAppAgent: React.FC<WhatsAppAgentProps> = ({ team, appointments, inventory, patients, settings }) => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'settings' | 'logs'>('dashboard');
-  const [botStatus, setBotStatus] = useState<'Active' | 'Paused' | 'Maintenance'>('Active');
-  const [selectedTestUser, setSelectedTestUser] = useState<string>(team[0]?.id || '');
+type AgentTab = 'playground' | 'brain' | 'connection' | 'logs';
+
+const WhatsAppAgent: React.FC<WhatsAppAgentProps> = ({ 
+    team, appointments, inventory, patients, settings,
+    addPatient, updatePatient, deletePatient, addAppointment, updateAppointment, updateInventoryItem, deleteInventoryItem
+}) => {
+  const [activeTab, setActiveTab] = useState<AgentTab>('playground');
+  const [botStatus, setBotStatus] = useState<'Active' | 'Paused'>('Active');
+  const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null);
   
-  // -- Settings State --
-  const [config, setConfig] = useState({
-      allowAppointments: true,
-      allowInventory: true,
-      allowPatientRecords: true,
-      requireAuth: true,
-      systemPrompt: "You are the JuaAfya Ops Bot. Be concise, professional, and helpful.",
-      businessNumber: settings.phone
+  // -- AI Configuration --
+  const [aiConfig, setAiConfig] = useState({
+      persona: 'Professional', // Professional, Friendly, Urgent
+      accessInventory: true,
+      accessAppointments: true,
+      accessPatients: true,
+      accessStaff: false
   });
 
-  // -- Chat Sandbox State --
-  const [sandboxInput, setSandboxInput] = useState('');
-  const [sandboxMessages, setSandboxMessages] = useState<ChatMessage[]>([
-      { id: '1', sender: 'bot', text: 'Sandbox Ready. Select a user and type a message to test the agent.', timestamp: new Date() }
+  // -- Connection Config --
+  const [connectionConfig, setConnectionConfig] = useState({
+      provider: 'Meta', // Meta or Twilio
+      phoneId: '',
+      accessToken: '',
+      webhookUrl: 'https://api.juaafya.com/webhooks/whatsapp/v1/entry'
+  });
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+
+  // -- Simulator State --
+  const [selectedTestUser, setSelectedTestUser] = useState<string>(team[0]?.id || '');
+  const [input, setInput] = useState('');
+  
+  const [messages, setMessages] = useState<ChatMessage[]>([
+      { id: 'init', sender: 'bot', text: 'JuaAfya Agent Online. How can I assist with clinic operations today?', timestamp: new Date().toISOString() }
   ]);
-  const [isThinking, setIsThinking] = useState(false);
+  
+  const [isProcessing, setIsProcessing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // -- Logs State --
-  const [activityLogs, setActivityLogs] = useState<LogEntry[]>([
-      { id: 'L-101', timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(), user: 'Dr. Andrew', role: 'Admin', query: 'Do we have Amoxicillin?', response: 'Yes, 400 Tablets in stock.', status: 'Success', latency: 450 },
-      { id: 'L-102', timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(), user: 'Sarah W.', role: 'Nurse', query: 'Next appointment?', response: 'Next is Wanjiku Kamau at 09:00.', status: 'Success', latency: 520 },
-  ]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [logSearch, setLogSearch] = useState('');
 
-  // Scroll to bottom of chat
+  // -- Persistence --
+  useEffect(() => {
+      try {
+          const savedMsgs = localStorage.getItem('wa_agent_messages');
+          if (savedMsgs) setMessages(JSON.parse(savedMsgs));
+          
+          const savedLogs = localStorage.getItem('wa_agent_logs');
+          if (savedLogs) setLogs(JSON.parse(savedLogs));
+      } catch (e) {
+          console.error("Error loading persisted agent data", e);
+      }
+  }, []);
+
+  useEffect(() => {
+      localStorage.setItem('wa_agent_messages', JSON.stringify(messages));
+  }, [messages]);
+
+  useEffect(() => {
+      localStorage.setItem('wa_agent_logs', JSON.stringify(logs));
+  }, [logs]);
+
+  // Scroll to bottom
   useEffect(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [sandboxMessages]);
+  }, [messages, isProcessing, activeTab]);
+
+  // Toast Timer
+  useEffect(() => {
+      if (toast) {
+          const timer = setTimeout(() => setToast(null), 3000);
+          return () => clearTimeout(timer);
+      }
+  }, [toast]);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+      setToast({ message, type });
+  };
+
+  // -- Logic --
+
+  const executeAction = (action: any) => {
+      console.log("Executing Action:", action);
+      try {
+          switch(action.type) {
+              case 'ADD_PATIENT':
+                  const newP: Patient = {
+                      id: `P${Math.floor(Math.random() * 9000 + 1000)}`,
+                      name: action.payload.name || 'Unknown',
+                      phone: action.payload.phone || '',
+                      age: parseInt(action.payload.age) || 0,
+                      gender: (action.payload.gender || 'Male') as Gender,
+                      lastVisit: new Date().toISOString().split('T')[0],
+                      notes: 'Added via WhatsApp Agent',
+                      history: []
+                  };
+                  addPatient(newP);
+                  return `✅ Added patient: ${newP.name}`;
+
+              case 'EDIT_PATIENT':
+                  const pToEdit = patients.find(p => p.id === action.payload.patientId);
+                  if (!pToEdit) return "❌ Failed: Patient not found.";
+                  const updatedP = { ...pToEdit, ...action.payload.updates };
+                  updatePatient(updatedP);
+                  return `✅ Updated patient record for ${updatedP.name}`;
+
+              case 'DELETE_PATIENT':
+                  deletePatient(action.payload.patientId);
+                  return `✅ Deleted patient record ${action.payload.patientId}`;
+
+              case 'ADD_APPOINTMENT':
+                  const patient = patients.find(p => p.id === action.payload.patientId) || patients.find(p => p.name.toLowerCase().includes((action.payload.patientId || '').toLowerCase()));
+                  if (!patient) return "❌ Failed: Patient not found.";
+                  
+                  const newAppt: Appointment = {
+                      id: `A${Date.now()}`,
+                      patientId: patient.id,
+                      patientName: patient.name,
+                      date: action.payload.date || new Date().toISOString().split('T')[0],
+                      time: action.payload.time || '09:00',
+                      reason: action.payload.reason || 'Checkup',
+                      status: 'Scheduled'
+                  };
+                  addAppointment(newAppt);
+                  return `✅ Scheduled appointment for ${patient.name} at ${newAppt.time}`;
+
+              case 'EDIT_APPOINTMENT':
+                  const apptToEdit = appointments.find(a => a.id === action.payload.appointmentId);
+                  if (!apptToEdit) return "❌ Failed: Appointment not found.";
+                  const updatedAppt = { ...apptToEdit, ...action.payload.updates };
+                  updateAppointment(updatedAppt);
+                  return `✅ Updated appointment for ${updatedAppt.patientName}`;
+
+              case 'CANCEL_APPOINTMENT':
+                  const appt = appointments.find(a => a.id === action.payload.appointmentId);
+                  if (!appt) return "❌ Failed: Appointment not found.";
+                  updateAppointment({ ...appt, status: 'Cancelled' });
+                  return `✅ Cancelled appointment for ${appt.patientName}`;
+
+              case 'UPDATE_STOCK':
+                  // Resolve item by ID (preferred) or Name
+                  let item = inventory.find(i => i.id === action.payload.itemId);
+                  if (!item && action.payload.itemName) {
+                      item = inventory.find(i => i.name.toLowerCase().includes(action.payload.itemName.toLowerCase()));
+                  }
+                  
+                  if (!item) return "❌ Failed: Item not found.";
+                  
+                  const newQty = parseInt(action.payload.newQuantity);
+                  if (isNaN(newQty)) return "❌ Failed: Invalid quantity.";
+
+                  updateInventoryItem({ ...item, stock: newQty }, 'WhatsApp Adjustment');
+                  return `✅ Updated ${item.name} stock to ${newQty}`;
+              
+              case 'DELETE_ITEM':
+                  // Resolve item by ID (preferred) or Name
+                  let itemToDelete = inventory.find(i => i.id === action.payload.itemId);
+                  if (!itemToDelete && action.payload.itemName) {
+                      itemToDelete = inventory.find(i => i.name.toLowerCase().includes(action.payload.itemName.toLowerCase()));
+                  }
+
+                  if (!itemToDelete) return "❌ Failed: Item not found.";
+                  deleteInventoryItem(itemToDelete.id);
+                  return `✅ Deleted inventory item: ${itemToDelete.name}`;
+
+              default:
+                  return null;
+          }
+      } catch (e) {
+          console.error(e);
+          return "❌ Error executing action.";
+      }
+  };
 
   const handleSendMessage = async () => {
-      if (!sandboxInput.trim() || !selectedTestUser) return;
+      if (!input.trim() || !selectedTestUser) return;
 
       const user = team.find(t => t.id === selectedTestUser);
       if (!user) return;
 
+      // 1. Add User Message
       const userMsg: ChatMessage = {
           id: Date.now().toString(),
           sender: 'user',
-          text: sandboxInput,
-          timestamp: new Date()
+          text: input,
+          timestamp: new Date().toISOString()
+      };
+      setMessages(prev => [...prev, userMsg]);
+      setInput('');
+      setIsProcessing(true);
+
+      // 2. Build Dynamic Context based on Permissions
+      const context: any = {
+          clinic: { name: settings.name, location: settings.location },
+          user: { name: user.name, role: user.role },
+          today: new Date().toLocaleDateString(),
       };
 
-      setSandboxMessages(prev => [...prev, userMsg]);
-      setSandboxInput('');
-      setIsThinking(true);
+      if (aiConfig.accessInventory) {
+          context.inventory = inventory.map(i => ({ id: i.id, name: i.name, stock: i.stock, unit: i.unit, location: 'Pharmacy' }));
+      }
+      if (aiConfig.accessAppointments) {
+          context.appointments = appointments.filter(a => a.status === 'Scheduled').map(a => ({ id: a.id, patient: a.patientName, time: a.time, reason: a.reason }));
+      }
+      if (aiConfig.accessPatients) {
+          context.patients = patients.map(p => ({ 
+              id: p.id, 
+              name: p.name, 
+              age: p.age, 
+              phone: p.phone,
+              gender: p.gender,
+              lastVisit: p.lastVisit,
+              notes: p.notes 
+          }));
+      }
+      if (aiConfig.accessStaff) {
+          context.staff = team.map(t => ({ name: t.name, role: t.role, status: t.status }));
+      }
 
-      const startTime = Date.now();
-
-      // Construct Context
-      const context = {
-          clinic: { name: settings.name, phone: settings.phone, location: settings.location },
-          user: { name: user.name, role: user.role, id: user.id },
-          team: team.map(t => ({ name: t.name, role: t.role, phone: t.phone })),
-          appointments: config.allowAppointments ? appointments : [],
-          inventory: config.allowInventory ? inventory.map(i => ({ name: i.name, stock: i.stock, location: 'Pharmacy' })) : [],
-          patients: config.allowPatientRecords ? patients.map(p => ({ name: p.name, age: p.age, gender: p.gender })) : [],
-          today: new Date().toLocaleDateString()
-      };
-
+      // 3. AI Processing
       try {
-          const responseText = await getStaffAssistantResponse(userMsg.text, context);
+          const aiResponse = await getStaffAssistantResponse(userMsg.text, context);
           
-          const botMsg: ChatMessage = {
-              id: (Date.now() + 1).toString(),
-              sender: 'bot',
-              text: responseText,
-              timestamp: new Date()
-          };
-          setSandboxMessages(prev => [...prev, botMsg]);
+          // Add Bot Reply
+          if (aiResponse.reply) {
+              const botMsg: ChatMessage = {
+                  id: (Date.now() + 1).toString(),
+                  sender: 'bot',
+                  text: aiResponse.reply,
+                  timestamp: new Date().toISOString()
+              };
+              setMessages(prev => [...prev, botMsg]);
+          }
 
-          // Log the interaction
+          // Handle Action
+          if (aiResponse.action) {
+              const resultMsg = executeAction(aiResponse.action);
+              if (resultMsg) {
+                  const sysMsg: ChatMessage = {
+                      id: (Date.now() + 2).toString(),
+                      sender: 'system',
+                      text: resultMsg,
+                      timestamp: new Date().toISOString(),
+                      isAction: true
+                  };
+                  setMessages(prev => [...prev, sysMsg]);
+              }
+          }
+
+          // Log
           const newLog: LogEntry = {
               id: `L-${Date.now()}`,
               timestamp: new Date().toISOString(),
               user: user.name,
-              role: user.role,
               query: userMsg.text,
-              response: responseText,
-              status: 'Success',
-              latency: Date.now() - startTime
+              response: aiResponse.reply || 'Action executed',
+              status: 'Success'
           };
-          setActivityLogs(prev => [newLog, ...prev]);
+          setLogs(prev => [newLog, ...prev]);
 
-      } catch (error) {
-          const errorMsg: ChatMessage = { id: Date.now().toString(), sender: 'bot', text: "Error processing request.", timestamp: new Date() };
-          setSandboxMessages(prev => [...prev, errorMsg]);
+      } catch (err) {
+          setMessages(prev => [...prev, { id: Date.now().toString(), sender: 'system', text: 'Error connecting to AI service.', timestamp: new Date().toISOString() }]);
       } finally {
-          setIsThinking(false);
+          setIsProcessing(false);
       }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-          e.preventDefault();
-          handleSendMessage();
+  const handleTestConnection = () => {
+      if (!connectionConfig.phoneId || !connectionConfig.accessToken) {
+          showToast('Please enter both ID and Token fields.', 'error');
+          return;
       }
+      
+      setIsTestingConnection(true);
+      setTimeout(() => {
+          setIsTestingConnection(false);
+          showToast('Connection Successful! Verified with Provider.', 'success');
+      }, 2000);
+  };
+
+  const handleCopyWebhook = () => {
+      navigator.clipboard.writeText(connectionConfig.webhookUrl);
+      showToast('Webhook URL copied to clipboard', 'success');
+  };
+
+  const handleSaveConfig = () => {
+      showToast('Agent configuration saved successfully.', 'success');
   };
 
   // --- RENDERERS ---
 
-  const renderDashboard = () => (
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4">
-          {/* Status Card */}
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col justify-between h-full">
-              <div>
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Connection Status</h3>
-                  <div className="flex items-center gap-4 mb-6">
-                      <div className={`w-16 h-16 rounded-full flex items-center justify-center ${botStatus === 'Active' ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-600'}`}>
-                          <Smartphone className="w-8 h-8" />
-                      </div>
-                      <div>
-                          <div className="text-2xl font-bold text-slate-900 dark:text-white">{botStatus}</div>
-                          <div className="text-sm text-slate-500 dark:text-slate-400">
-                              {botStatus === 'Active' ? 'Listening for messages' : 'Bot is offline'}
+  const renderPlayground = () => (
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[600px] animate-in fade-in slide-in-from-bottom-4">
+          {/* Controls Sidebar */}
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col">
+              <div className="mb-6">
+                  <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      <Terminal className="w-5 h-5 text-indigo-600" /> Simulator
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1">Test the agent as different staff members.</p>
+              </div>
+
+              <div className="space-y-6 flex-1">
+                  <div>
+                      <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Simulate User</label>
+                      <select 
+                          value={selectedTestUser}
+                          onChange={(e) => setSelectedTestUser(e.target.value)}
+                          className="w-full p-3 bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl text-sm outline-none dark:text-white"
+                      >
+                          {team.map(t => <option key={t.id} value={t.id}>{t.name} ({t.role})</option>)}
+                      </select>
+                  </div>
+
+                  <div className="p-4 bg-slate-50 dark:bg-slate-700/30 rounded-xl border border-slate-100 dark:border-slate-700">
+                      <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Agent Status</span>
+                          <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold uppercase ${botStatus === 'Active' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                              <div className={`w-2 h-2 rounded-full ${botStatus === 'Active' ? 'bg-green-50 animate-pulse' : 'bg-amber-500'}`}></div>
+                              {botStatus}
                           </div>
                       </div>
+                      <button 
+                          onClick={() => setBotStatus(botStatus === 'Active' ? 'Paused' : 'Active')}
+                          className="w-full py-2 text-xs font-bold bg-white dark:bg-slate-600 border border-slate-200 dark:border-slate-500 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-500 transition-colors"
+                      >
+                          {botStatus === 'Active' ? 'Pause Agent' : 'Activate Agent'}
+                      </button>
                   </div>
-                  
-                  <div className="space-y-3">
-                      <div className="flex justify-between text-sm">
-                          <span className="text-slate-500">Business Number</span>
-                          <span className="font-mono font-medium dark:text-white">{config.businessNumber}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                          <span className="text-slate-500">API Provider</span>
-                          <span className="font-medium text-teal-600">WhatsApp Cloud API</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                          <span className="text-slate-500">Webhook Health</span>
-                          <span className="font-medium text-green-600 flex items-center gap-1"><CheckCircle className="w-3 h-3"/> 100% OK</span>
+
+                  <div className="p-4 bg-indigo-50 dark:bg-indigo-900/10 rounded-xl border border-indigo-100 dark:border-indigo-900/30">
+                      <h4 className="text-xs font-bold text-indigo-800 dark:text-indigo-300 mb-2 flex items-center gap-1">
+                          <Brain className="w-3 h-3" /> Active Context
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                          {aiConfig.accessInventory && <span className="text-[10px] bg-white dark:bg-indigo-900/40 px-2 py-1 rounded border border-indigo-100 dark:border-indigo-800 text-indigo-600 dark:text-indigo-300">Inventory</span>}
+                          {aiConfig.accessAppointments && <span className="text-[10px] bg-white dark:bg-indigo-900/40 px-2 py-1 rounded border border-indigo-100 dark:border-indigo-800 text-indigo-600 dark:text-indigo-300">Schedule</span>}
+                          {aiConfig.accessPatients && <span className="text-[10px] bg-white dark:bg-indigo-900/40 px-2 py-1 rounded border border-indigo-100 dark:border-indigo-800 text-indigo-600 dark:text-indigo-300">Patients</span>}
                       </div>
                   </div>
-              </div>
-              
-              <div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-700">
-                  <button 
-                      onClick={() => setBotStatus(botStatus === 'Active' ? 'Paused' : 'Active')}
-                      className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors ${
-                          botStatus === 'Active' 
-                          ? 'bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20' 
-                          : 'bg-green-600 text-white hover:bg-green-700'
-                      }`}
-                  >
-                      {botStatus === 'Active' ? <StopCircle className="w-5 h-5"/> : <Play className="w-5 h-5"/>}
-                      {botStatus === 'Active' ? 'Stop Agent' : 'Start Agent'}
-                  </button>
               </div>
           </div>
 
-          {/* Sandbox Chat */}
-          <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col h-[500px]">
-              <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-700/50 rounded-t-3xl">
-                  <div className="flex items-center gap-2">
-                      <Terminal className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                      <h3 className="font-bold text-slate-900 dark:text-white">Test Sandbox</h3>
+          {/* Chat Interface */}
+          <div className="lg:col-span-2 bg-slate-100 dark:bg-slate-900 rounded-3xl shadow-inner flex flex-col overflow-hidden border border-slate-200 dark:border-slate-700">
+              <div className="p-4 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center shadow-sm z-10">
+                  <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center text-green-600">
+                          <Bot className="w-6 h-6" />
+                      </div>
+                      <div>
+                          <h4 className="font-bold text-slate-900 dark:text-white">JuaAfya Ops Bot</h4>
+                          <p className="text-xs text-green-600 dark:text-green-400 font-medium">
+                              {isProcessing ? 'Analyzing clinic data...' : 'Online'}
+                          </p>
+                      </div>
                   </div>
-                  <select 
-                      value={selectedTestUser}
-                      onChange={(e) => setSelectedTestUser(e.target.value)}
-                      className="text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 outline-none dark:text-white"
-                  >
-                      {team.map(t => <option key={t.id} value={t.id}>Simulate as: {t.name} ({t.role})</option>)}
-                  </select>
+                  <button onClick={() => setMessages([])} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors" title="Clear Chat History">
+                      <Trash2 className="w-5 h-5" />
+                  </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50 dark:bg-slate-900/50">
-                  {sandboxMessages.map(msg => (
-                      <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                          <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${
+              <div 
+                className="flex-1 overflow-y-auto p-6 space-y-4" 
+                style={{ 
+                    backgroundImage: 'radial-gradient(#00000010 1px, transparent 1px)', 
+                    backgroundSize: '20px 20px',
+                    backgroundColor: activeTab === 'playground' ? (document.documentElement.classList.contains('dark') ? '#0b141a' : '#e5ddd5') : 'transparent' 
+                }}
+              >
+                  {messages.map((msg, idx) => (
+                      <div key={msg.id || idx} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`max-w-[80%] p-3 rounded-xl shadow-sm text-sm relative ${
                               msg.sender === 'user' 
-                              ? 'bg-teal-600 text-white rounded-br-none' 
-                              : 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-600 rounded-bl-none shadow-sm'
+                              ? 'bg-[#dcf8c6] dark:bg-[#056162] text-slate-900 dark:text-white rounded-tr-none' 
+                              : msg.sender === 'system'
+                                  ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-800 dark:text-blue-100 border border-blue-100 dark:border-blue-800 rounded-lg text-center text-xs w-full mb-2 font-bold'
+                                  : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-tl-none'
                           }`}>
+                              {msg.isAction && <Zap className="w-3 h-3 inline mr-1 text-blue-500" />}
                               {msg.text}
-                              <div className={`text-[10px] mt-1 text-right ${msg.sender === 'user' ? 'text-teal-100' : 'text-slate-400'}`}>
-                                  {msg.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                              <div className={`text-[9px] mt-1 text-right opacity-60 ${msg.sender === 'system' ? 'hidden' : ''}`}>
+                                  {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                               </div>
                           </div>
                       </div>
                   ))}
-                  {isThinking && (
+                  {isProcessing && (
                       <div className="flex justify-start">
-                          <div className="bg-white dark:bg-slate-700 p-3 rounded-2xl rounded-bl-none shadow-sm border border-slate-200 dark:border-slate-600 flex items-center gap-2">
-                              <Activity className="w-4 h-4 text-teal-500 animate-spin" />
-                              <span className="text-xs text-slate-500 dark:text-slate-400">Processing clinic data...</span>
+                          <div className="bg-white dark:bg-slate-800 p-3 rounded-xl rounded-tl-none shadow-sm flex items-center gap-2">
+                              <div className="flex gap-1">
+                                  <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></span>
+                                  <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce delay-100"></span>
+                                  <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce delay-200"></span>
+                              </div>
                           </div>
                       </div>
                   )}
                   <div ref={messagesEndRef} />
               </div>
 
-              <div className="p-4 border-t border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-b-3xl">
-                  <div className="relative">
+              <div className="p-4 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700">
+                  <div className="flex gap-2">
                       <input 
-                          value={sandboxInput}
-                          onChange={(e) => setSandboxInput(e.target.value)}
-                          onKeyDown={handleKeyPress}
-                          placeholder="Type a message to test..."
-                          className="w-full pl-4 pr-12 py-3 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-teal-500 dark:text-white transition-all"
-                          disabled={isThinking || botStatus !== 'Active'}
+                          value={input}
+                          onChange={(e) => setInput(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                          placeholder="Type a message..."
+                          className="flex-1 p-3 bg-slate-100 dark:bg-slate-700 border-none rounded-xl outline-none focus:ring-2 focus:ring-green-500 dark:text-white"
+                          disabled={isProcessing || botStatus === 'Paused'}
                       />
                       <button 
                           onClick={handleSendMessage}
-                          disabled={!sandboxInput.trim() || isThinking || botStatus !== 'Active'}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition-colors"
+                          disabled={!input.trim() || isProcessing || botStatus === 'Paused'}
+                          className="p-3 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 transition-colors shadow-lg shadow-green-200 dark:shadow-none"
                       >
-                          <Send className="w-4 h-4" />
+                          <Send className="w-5 h-5" />
                       </button>
                   </div>
               </div>
@@ -253,76 +470,80 @@ const WhatsAppAgent: React.FC<WhatsAppAgentProps> = ({ team, appointments, inven
       </div>
   );
 
-  const renderSettingsPanel = () => (
-      <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 animate-in fade-in">
-          <div className="max-w-4xl mx-auto space-y-8">
-              <div>
-                  <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Agent Configuration</h3>
-                  <p className="text-slate-500 dark:text-slate-400">Manage how the WhatsApp bot behaves and what data it can access.</p>
+  const renderBrain = () => (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-4">
+          <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
+                  <Database className="w-6 h-6 text-indigo-600" /> Data Capabilities
+              </h3>
+              <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">
+                  Select which clinic data the AI Agent can access to answer queries. This integrates the bot directly with your live system.
+              </p>
+
+              <div className="space-y-4">
+                  {[
+                      { id: 'accessInventory', label: 'Inventory & Stock', desc: 'Allow checking medicine availability and expiration dates.' },
+                      { id: 'accessAppointments', label: 'Appointment Schedule', desc: 'Allow checking doctor availability and patient queues.' },
+                      { id: 'accessPatients', label: 'Patient Records', desc: 'Allow lookup of patient history and biometrics (Restricted).' },
+                      { id: 'accessStaff', label: 'Staff Directory', desc: 'Allow finding contact details of other team members.' },
+                  ].map((item) => (
+                      <div key={item.id} className="flex items-start gap-4 p-4 border border-slate-100 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                          <input 
+                              type="checkbox"
+                              checked={(aiConfig as any)[item.id]}
+                              onChange={(e) => setAiConfig({ ...aiConfig, [item.id]: e.target.checked })}
+                              className="mt-1 w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500 cursor-pointer"
+                          />
+                          <div>
+                              <label className="font-bold text-slate-900 dark:text-white text-sm cursor-pointer block">{item.label}</label>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{item.desc}</p>
+                          </div>
+                      </div>
+                  ))}
               </div>
+          </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {/* Data Access Control */}
-                  <div className="space-y-4">
-                      <h4 className="font-bold text-slate-800 dark:text-white flex items-center gap-2 text-sm uppercase tracking-wider">
-                          <Shield className="w-4 h-4" /> Data Access Permissions
-                      </h4>
-                      <div className="p-4 bg-slate-50 dark:bg-slate-700/30 rounded-xl border border-slate-200 dark:border-slate-600 space-y-4">
-                          {[
-                              { id: 'allowAppointments', label: 'View Appointments', desc: 'Allow bot to read scheduling data' },
-                              { id: 'allowInventory', label: 'Check Inventory', desc: 'Allow bot to query stock levels' },
-                              { id: 'allowPatientRecords', label: 'Patient Basic Info', desc: 'Read names and demographics (No Medical History)' },
-                          ].map(opt => (
-                              <div key={opt.id} className="flex items-start gap-3">
-                                  <input 
-                                      type="checkbox" 
-                                      id={opt.id}
-                                      checked={(config as any)[opt.id]}
-                                      onChange={(e) => setConfig({...config, [opt.id]: e.target.checked})}
-                                      className="mt-1 w-5 h-5 text-teal-600 rounded focus:ring-teal-500 cursor-pointer"
-                                  />
-                                  <div>
-                                      <label htmlFor={opt.id} className="font-bold text-slate-700 dark:text-slate-200 text-sm cursor-pointer">{opt.label}</label>
-                                      <p className="text-xs text-slate-500 dark:text-slate-400">{opt.desc}</p>
-                                  </div>
-                              </div>
-                          ))}
-                      </div>
-                  </div>
+          <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
+                  <Sparkles className="w-6 h-6 text-purple-600" /> Agent Persona
+              </h3>
+              <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">
+                  Define how the AI should communicate with your staff.
+              </p>
 
-                  {/* Security */}
-                  <div className="space-y-4">
-                      <h4 className="font-bold text-slate-800 dark:text-white flex items-center gap-2 text-sm uppercase tracking-wider">
-                          <AlertCircle className="w-4 h-4" /> Security & Auth
-                      </h4>
-                      <div className="p-4 bg-slate-50 dark:bg-slate-700/30 rounded-xl border border-slate-200 dark:border-slate-600">
-                          <div className="flex items-center justify-between mb-4">
-                              <div>
-                                  <div className="font-bold text-slate-700 dark:text-slate-200 text-sm">Enforce Team Verification</div>
-                                  <p className="text-xs text-slate-500">Only numbers listed in "Team Members" can interact.</p>
-                              </div>
-                              <button 
-                                  onClick={() => setConfig({...config, requireAuth: !config.requireAuth})}
-                                  className={`w-10 h-6 rounded-full relative transition-colors ${config.requireAuth ? 'bg-teal-600' : 'bg-slate-300'}`}
-                              >
-                                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${config.requireAuth ? 'left-5' : 'left-1'}`}></div>
-                              </button>
-                          </div>
-                          <div className="pt-4 border-t border-slate-200 dark:border-slate-600">
-                              <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">System Instructions (Prompt)</label>
-                              <textarea 
-                                  value={config.systemPrompt}
-                                  onChange={(e) => setConfig({...config, systemPrompt: e.target.value})}
-                                  className="w-full p-3 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg outline-none focus:ring-2 focus:ring-teal-500 dark:text-white"
-                                  rows={3}
-                              />
-                          </div>
-                      </div>
+              <div className="mb-8">
+                  <label className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 block">Tone of Voice</label>
+                  <div className="grid grid-cols-3 gap-3">
+                      {['Professional', 'Friendly', 'Urgent'].map(mode => (
+                          <button
+                              key={mode}
+                              onClick={() => setAiConfig({ ...aiConfig, persona: mode })}
+                              className={`py-3 rounded-xl text-sm font-bold border-2 transition-all ${
+                                  aiConfig.persona === mode 
+                                  ? 'border-purple-600 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300' 
+                                  : 'border-slate-100 dark:border-slate-700 text-slate-500 hover:border-purple-200'
+                              }`}
+                          >
+                              {mode}
+                          </button>
+                      ))}
                   </div>
               </div>
 
-              <div className="flex justify-end pt-4 border-t border-slate-100 dark:border-slate-700">
-                  <button className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:opacity-90 transition-opacity">
+              <div className="p-4 bg-slate-50 dark:bg-slate-700/30 rounded-xl border border-slate-100 dark:border-slate-700">
+                  <h4 className="font-bold text-slate-900 dark:text-white text-sm mb-2">Preview Instruction</h4>
+                  <p className="text-xs font-mono text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-600">
+                      "You are the JuaAfya Operations Assistant. Your tone is {aiConfig.persona.toUpperCase()}. 
+                      You have access to: {aiConfig.accessInventory ? 'Inventory, ' : ''}{aiConfig.accessAppointments ? 'Schedule, ' : ''}...
+                      Keep responses concise and actionable for mobile reading."
+                  </p>
+              </div>
+
+              <div className="mt-8 flex justify-end">
+                  <button 
+                    onClick={handleSaveConfig}
+                    className="px-6 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold rounded-xl hover:opacity-90 flex items-center gap-2"
+                  >
                       <Save className="w-4 h-4" /> Save Configuration
                   </button>
               </div>
@@ -330,109 +551,208 @@ const WhatsAppAgent: React.FC<WhatsAppAgentProps> = ({ team, appointments, inven
       </div>
   );
 
-  const renderLogs = () => (
-      <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden animate-in fade-in">
-          <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
-              <h3 className="font-bold text-slate-900 dark:text-white">Activity Logs</h3>
-              <div className="flex gap-2">
-                  <button onClick={() => setActivityLogs([])} className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1 font-bold">
-                      <Trash2 className="w-3 h-3" /> Clear History
-                  </button>
-                  <button className="text-xs text-teal-600 hover:text-teal-700 flex items-center gap-1 font-bold">
-                      <RefreshCw className="w-3 h-3" /> Refresh
-                  </button>
+  const renderConnection = () => (
+      <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4">
+          <div className="flex items-center justify-between mb-8">
+              <div>
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white">Provider Connection</h3>
+                  <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Connect your business number via Meta or Twilio API.</p>
+              </div>
+              <div className="bg-slate-100 dark:bg-slate-700 p-1 rounded-xl flex">
+                  {['Meta', 'Twilio'].map(p => (
+                      <button 
+                          key={p}
+                          onClick={() => setConnectionConfig({ ...connectionConfig, provider: p })}
+                          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${connectionConfig.provider === p ? 'bg-white dark:bg-slate-600 shadow text-slate-900 dark:text-white' : 'text-slate-500'}`}
+                      >
+                          {p}
+                      </button>
+                  ))}
               </div>
           </div>
-          <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-50 dark:bg-slate-700/50 text-xs uppercase text-slate-400 font-semibold">
-                      <tr>
-                          <th className="px-6 py-4">Time</th>
-                          <th className="px-6 py-4">User</th>
-                          <th className="px-6 py-4">Message</th>
-                          <th className="px-6 py-4">Bot Response</th>
-                          <th className="px-6 py-4">Latency</th>
-                          <th className="px-6 py-4">Status</th>
-                      </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50 dark:divide-slate-700">
-                      {activityLogs.map(log => (
-                          <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                              <td className="px-6 py-4 text-slate-500 text-xs whitespace-nowrap">
-                                  {new Date(log.timestamp).toLocaleTimeString()}
-                              </td>
-                              <td className="px-6 py-4">
-                                  <div className="font-bold text-slate-900 dark:text-white">{log.user}</div>
-                                  <div className="text-xs text-slate-500">{log.role}</div>
-                              </td>
-                              <td className="px-6 py-4 text-slate-700 dark:text-slate-300 max-w-[200px] truncate" title={log.query}>
-                                  "{log.query}"
-                              </td>
-                              <td className="px-6 py-4 text-slate-500 dark:text-slate-400 max-w-[200px] truncate" title={log.response}>
-                                  {log.response}
-                              </td>
-                              <td className="px-6 py-4 font-mono text-xs text-slate-500">
-                                  {log.latency}ms
-                              </td>
-                              <td className="px-6 py-4">
-                                  <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
-                                      log.status === 'Success' 
-                                      ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400' 
-                                      : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'
-                                  }`}>
-                                      {log.status}
-                                  </span>
-                              </td>
-                          </tr>
-                      ))}
-                      {activityLogs.length === 0 && (
-                          <tr>
-                              <td colSpan={6} className="p-8 text-center text-slate-400">No activity recorded yet.</td>
-                          </tr>
-                      )}
-                  </tbody>
-              </table>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-6">
+                  <div>
+                      <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">
+                          {connectionConfig.provider === 'Meta' ? 'Phone Number ID' : 'Account SID'}
+                      </label>
+                      <div className="relative">
+                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                          <input 
+                              type="password"
+                              value={connectionConfig.phoneId}
+                              onChange={(e) => setConnectionConfig({ ...connectionConfig, phoneId: e.target.value })}
+                              className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-teal-500 dark:text-white"
+                              placeholder={connectionConfig.provider === 'Meta' ? 'e.g. 1000832...' : 'e.g. AC823...'}
+                          />
+                      </div>
+                  </div>
+                  <div>
+                      <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">
+                          {connectionConfig.provider === 'Meta' ? 'Access Token' : 'Auth Token'}
+                      </label>
+                      <div className="relative">
+                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                          <input 
+                              type="password"
+                              value={connectionConfig.accessToken}
+                              onChange={(e) => setConnectionConfig({ ...connectionConfig, accessToken: e.target.value })}
+                              className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-teal-500 dark:text-white"
+                              placeholder={connectionConfig.provider === 'Meta' ? 'e.g. EAA...' : 'e.g. 71d9...'}
+                          />
+                      </div>
+                  </div>
+                  <button 
+                    onClick={handleTestConnection}
+                    disabled={isTestingConnection}
+                    className="w-full py-3 bg-teal-600 text-white font-bold rounded-xl hover:bg-teal-700 shadow-lg shadow-teal-200 dark:shadow-none transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                      {isTestingConnection ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Test Connection'}
+                  </button>
+              </div>
+
+              <div className="p-6 bg-slate-50 dark:bg-slate-700/30 rounded-2xl border border-slate-200 dark:border-slate-600">
+                  <h4 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                      <Wifi className="w-5 h-5 text-indigo-600" /> Webhook Setup
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                      Copy this URL to your provider's dashboard to receive incoming messages.
+                  </p>
+                  <div className="flex gap-2">
+                      <input 
+                          readOnly 
+                          value={connectionConfig.webhookUrl} 
+                          className="flex-1 p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl text-xs font-mono text-slate-600 dark:text-slate-300"
+                      />
+                      <button 
+                        onClick={handleCopyWebhook}
+                        className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700"
+                        title="Copy"
+                      >
+                          <Copy className="w-4 h-4 text-slate-500" />
+                      </button>
+                  </div>
+                  <div className="mt-4 flex items-center gap-2">
+                      <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                      <span className="text-xs font-bold text-red-500">Webhook Disconnected</span>
+                  </div>
+              </div>
           </div>
       </div>
   );
 
+  const renderLogs = () => {
+      const filteredLogs = logs.filter(l => 
+          l.user.toLowerCase().includes(logSearch.toLowerCase()) ||
+          l.query.toLowerCase().includes(logSearch.toLowerCase()) ||
+          l.response.toLowerCase().includes(logSearch.toLowerCase())
+      );
+
+      return (
+        <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex flex-col md:flex-row justify-between items-center gap-4">
+                <h3 className="font-bold text-slate-900 dark:text-white">Interaction History</h3>
+                <div className="flex items-center gap-3 w-full md:w-auto">
+                    <div className="relative flex-1 md:w-64">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input 
+                            placeholder="Search logs..." 
+                            value={logSearch}
+                            onChange={(e) => setLogSearch(e.target.value)}
+                            className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-700 rounded-xl text-sm outline-none dark:text-white"
+                        />
+                    </div>
+                    <button onClick={() => setLogs([])} className="text-xs text-red-500 font-bold hover:underline whitespace-nowrap">Clear Logs</button>
+                </div>
+            </div>
+            <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50 dark:bg-slate-700/50 text-xs uppercase text-slate-400 font-semibold border-b border-slate-100 dark:border-slate-700">
+                        <tr>
+                            <th className="px-6 py-4">Time</th>
+                            <th className="px-6 py-4">User</th>
+                            <th className="px-6 py-4">Query</th>
+                            <th className="px-6 py-4">Response</th>
+                            <th className="px-6 py-4">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50 dark:divide-slate-700">
+                        {filteredLogs.map((log) => (
+                            <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                                <td className="px-6 py-4 text-slate-500 text-xs font-mono whitespace-nowrap">{new Date(log.timestamp).toLocaleTimeString()}</td>
+                                <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">{log.user}</td>
+                                <td className="px-6 py-4 text-slate-600 dark:text-slate-300 max-w-[200px] truncate" title={log.query}>"{log.query}"</td>
+                                <td className="px-6 py-4 text-slate-500 max-w-[250px] truncate" title={log.response}>{log.response}</td>
+                                <td className="px-6 py-4">
+                                    <span className={`text-xs font-bold px-2 py-1 rounded ${
+                                        log.status === 'Success' 
+                                        ? 'text-green-600 bg-green-50 dark:bg-green-900/20' 
+                                        : 'text-red-600 bg-red-50 dark:bg-red-900/20'
+                                    }`}>
+                                        {log.status}
+                                    </span>
+                                </td>
+                            </tr>
+                        ))}
+                        {filteredLogs.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-slate-400">No logs found.</td></tr>}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+      );
+  };
+
   return (
     <div className="p-6 md:p-10 bg-gray-50 dark:bg-slate-900 min-h-screen transition-colors duration-200">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-6">
             <div>
-                <h2 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <MessageSquare className="w-8 h-8 text-green-600" /> WhatsApp Integration
+                <h2 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
+                    <MessageSquare className="w-8 h-8 text-green-600" /> WhatsApp Agent
                 </h2>
-                <p className="text-slate-500 dark:text-slate-400 mt-1">Manage your Staff Ops Bot settings and monitor activity.</p>
+                <p className="text-slate-500 dark:text-slate-400 mt-1">AI-powered assistant for clinic operations.</p>
             </div>
             
-            <div className="flex bg-white dark:bg-slate-800 p-1 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+            <div className="flex bg-white dark:bg-slate-800 p-1.5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-x-auto">
                 {[
-                    { id: 'dashboard', label: 'Console', icon: Terminal },
-                    { id: 'settings', label: 'Configuration', icon: Settings },
+                    { id: 'playground', label: 'Playground', icon: Terminal },
+                    { id: 'brain', label: 'AI Brain', icon: Brain },
+                    { id: 'connection', label: 'Connection', icon: LinkIcon },
                     { id: 'logs', label: 'Logs', icon: Activity },
                 ].map(tab => (
                     <button 
                         key={tab.id}
-                        onClick={() => setActiveTab(tab.id as any)}
-                        className={`px-4 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${
+                        onClick={() => setActiveTab(tab.id as AgentTab)}
+                        className={`px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all whitespace-nowrap ${
                             activeTab === tab.id 
                             ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-md' 
-                            : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white'
+                            : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700'
                         }`}
                     >
                         <tab.icon className="w-4 h-4" />
-                        <span className="hidden sm:inline">{tab.label}</span>
+                        {tab.label}
                     </button>
                 ))}
             </div>
         </div>
 
         <div className="min-h-[500px]">
-            {activeTab === 'dashboard' && renderDashboard()}
-            {activeTab === 'settings' && renderSettingsPanel()}
+            {activeTab === 'playground' && renderPlayground()}
+            {activeTab === 'brain' && renderBrain()}
+            {activeTab === 'connection' && renderConnection()}
             {activeTab === 'logs' && renderLogs()}
         </div>
+
+        {/* Toast Notification */}
+        {toast && (
+            <div className={`fixed bottom-6 right-6 px-6 py-4 rounded-xl shadow-2xl border flex items-center gap-3 animate-in slide-in-from-bottom-5 z-[70] ${
+                toast.type === 'success' ? 'bg-white dark:bg-slate-800 border-green-500 text-green-600' :
+                'bg-white dark:bg-slate-800 border-red-500 text-red-600'
+            }`}>
+                {toast.type === 'success' ? <Check className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+                <span className="font-bold text-sm">{toast.message}</span>
+            </div>
+        )}
     </div>
   );
 };

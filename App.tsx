@@ -301,6 +301,26 @@ const App: React.FC = () => {
       showToast('Medications dispensed. Sent to Clearance.');
   };
 
+  const completeVisit = (visit: Visit) => {
+      // Archive history
+      const diagnosisText = visit.diagnosis ? `Dx: ${visit.diagnosis}` : 'No Diagnosis';
+      const notesText = visit.doctorNotes ? `Notes: ${visit.doctorNotes}` : '';
+      const summary = `[${visit.startTime.split('T')[0]}] ${diagnosisText}. ${notesText}`.trim();
+      
+      const patient = patients.find(p => p.id === visit.patientId);
+      if (patient) {
+          const updatedPatient = {
+              ...patient,
+              lastVisit: new Date().toISOString().split('T')[0],
+              history: [summary, ...patient.history]
+          };
+          setPatients(prev => prev.map(p => p.id === updatedPatient.id ? updatedPatient : p));
+      }
+
+      updateVisit({ ...visit, stage: 'Completed' });
+      showToast('Visit finalized and archived to patient history.', 'success');
+  };
+
   const renderContent = () => {
     // Shared Props
     const queueProps = {
@@ -308,7 +328,8 @@ const App: React.FC = () => {
         patients,
         inventory,
         addVisit,
-        updateVisit
+        updateVisit,
+        onCompleteVisit: completeVisit
     };
 
     switch (currentView) {
@@ -360,7 +381,23 @@ const App: React.FC = () => {
       case 'bulk-sms':
         return <BulkSMS patients={patients} showToast={showToast} />;
       case 'whatsapp-agent':
-        return <WhatsAppAgent team={settings.team} appointments={appointments} inventory={inventory} patients={patients} settings={settings} />;
+        return (
+            <WhatsAppAgent 
+                team={settings.team} 
+                appointments={appointments} 
+                inventory={inventory} 
+                patients={patients} 
+                settings={settings}
+                // Actions
+                addPatient={addPatient}
+                updatePatient={updatePatient}
+                deletePatient={deletePatient}
+                addAppointment={addAppointment}
+                updateAppointment={updateAppointment}
+                updateInventoryItem={updateInventoryItem}
+                deleteInventoryItem={deleteInventoryItem}
+            />
+        );
       case 'reports':
         return <Reports />;
       case 'settings':
