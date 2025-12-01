@@ -54,6 +54,7 @@ export const Modal: React.FC<ModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? 'modal-title' : undefined}
+        aria-describedby={subtitle ? 'modal-description' : undefined}
       >
         {/* Header */}
         {(title || closeButton) && (
@@ -68,7 +69,7 @@ export const Modal: React.FC<ModalProps> = ({
                 </h2>
               )}
               {subtitle && (
-                <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                <p id="modal-description" className="text-sm text-slate-600 dark:text-slate-400 mt-1">
                   {subtitle}
                 </p>
               )}
