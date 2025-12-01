@@ -40,21 +40,23 @@ export const memoWithDeepCompare = <P extends object>(
 };
 
 /**
- * Create a suspended lazy component loader
+ * Create a lazy loaded component with suspense wrapper
  */
 export const lazyWithFallback = <P extends object>(
   loader: () => Promise<{ default: React.ComponentType<P> }>,
   fallback: React.ReactNode
-): [React.LazyExoticComponent<React.ComponentType<P>>, React.FC<{ children: React.ReactNode }>] => {
+) => {
   const LazyComponent = React.lazy(loader);
 
-  const Suspense: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  const Wrapped = (props: P) => (
     <React.Suspense fallback={fallback}>
-      {children}
+      <LazyComponent {...props} />
     </React.Suspense>
   );
 
-  return [LazyComponent, Suspense];
+  Wrapped.displayName = 'LazyWithFallback';
+
+  return Wrapped;
 };
 
 /**
