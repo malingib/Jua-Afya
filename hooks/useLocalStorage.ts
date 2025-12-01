@@ -1,12 +1,14 @@
-import { useState, useEffect, useCallback, Dispatch, SetStateAction } from 'react';
+import { useState, useEffect, useCallback, Dispatch, SetStateAction, useRef } from 'react';
 
 /**
  * useLocalStorage Hook
  * Persists state to localStorage and syncs across browser tabs
+ * Uses debouncing to prevent excessive localStorage writes
  */
 export const useLocalStorage = <T,>(
   key: string,
-  initialValue: T
+  initialValue: T,
+  debounceMs: number = 500
 ): [T, Dispatch<SetStateAction<T>>, { remove: () => void }] => {
   // State to store our value
   const [storedValue, setStoredValue] = useState<T>(() => {
@@ -22,34 +24,59 @@ export const useLocalStorage = <T,>(
     }
   });
 
+  // Ref for debounce timer
+  const debounceTimerRef = useRef<NodeJS.Timeout>();
+  const pendingValueRef = useRef<T>(storedValue);
+
   // Return a wrapped version of useState's setter function that
-  // persists the new value to localStorage
+  // persists the new value to localStorage with debouncing
   const setValue = useCallback(
     (value: SetStateAction<T>) => {
       try {
         // Allow value to be a function so we have same API as useState
         const valueToStore = value instanceof Function ? value(storedValue) : value;
 
-        // Save to state
+        // Save to state immediately for responsive UI
         setStoredValue(valueToStore);
+        pendingValueRef.current = valueToStore;
 
-        // Save to local storage
-        window.localStorage.setItem(key, JSON.stringify(valueToStore));
+        // Clear existing timer
+        if (debounceTimerRef.current) {
+          clearTimeout(debounceTimerRef.current);
+        }
 
-        // Dispatch storage event for other tabs/windows
-        window.dispatchEvent(
-          new StorageEvent('storage', {
-            key,
-            newValue: JSON.stringify(valueToStore),
-            url: window.location.href,
-          })
-        );
+        // Set debounced localStorage save
+        debounceTimerRef.current = setTimeout(() => {
+          try {
+            window.localStorage.setItem(key, JSON.stringify(pendingValueRef.current));
+
+            // Dispatch storage event for other tabs/windows
+            window.dispatchEvent(
+              new StorageEvent('storage', {
+                key,
+                newValue: JSON.stringify(pendingValueRef.current),
+                url: window.location.href,
+              })
+            );
+          } catch (error) {
+            console.error(`Error saving ${key} to localStorage:`, error);
+          }
+        }, debounceMs);
       } catch (error) {
-        console.error(`Error saving ${key} to localStorage:`, error);
+        console.error(`Error updating ${key}:`, error);
       }
     },
-    [key, storedValue]
+    [key, storedValue, debounceMs]
   );
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
 
   // Listen for changes in other tabs/windows
   useEffect(() => {
