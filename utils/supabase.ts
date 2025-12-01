@@ -21,7 +21,7 @@ export const supabaseAuth = {
   /**
    * Sign up a new user
    */
-  async signUp(email: string, password: string, metadata?: Record<string, any>) {
+  async signUp(email: string, password: string, metadata?: Record<string, any>): Promise<AuthResponse> {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
       throw new Error('Supabase not configured');
     }
@@ -55,7 +55,7 @@ export const supabaseAuth = {
   /**
    * Sign in with email and password
    */
-  async signIn(email: string, password: string) {
+  async signIn(email: string, password: string): Promise<AuthSession> {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
       throw new Error('Supabase not configured');
     }
@@ -88,7 +88,7 @@ export const supabaseAuth = {
   /**
    * Sign out the current user
    */
-  async signOut(accessToken: string) {
+  async signOut(accessToken: string): Promise<void> {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
       return { ok: true };
     }
@@ -110,7 +110,7 @@ export const supabaseAuth = {
   /**
    * Get current user session
    */
-  async getSession(accessToken: string) {
+  async getSession(accessToken: string): Promise<AuthUser | null> {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
       return null;
     }
@@ -137,7 +137,7 @@ export const supabaseAuth = {
   /**
    * Refresh access token
    */
-  async refreshToken(refreshToken: string) {
+  async refreshToken(refreshToken: string): Promise<AuthSession> {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
       throw new Error('Supabase not configured');
     }
@@ -168,7 +168,7 @@ export const supabaseAuth = {
   /**
    * Reset password
    */
-  async resetPassword(email: string) {
+  async resetPassword(email: string): Promise<{ ok: boolean }> {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
       throw new Error('Supabase not configured');
     }
