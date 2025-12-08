@@ -5,7 +5,8 @@ import { MOCK_LAB_TESTS } from '../constants';
 import { 
   Users, Activity, Stethoscope, Pill, CreditCard, CheckCircle, 
   Clock, ArrowRight, UserPlus, FileText, Plus, X, Search, 
-  FlaskConical, AlertTriangle, ShieldCheck, History, MoreHorizontal, Thermometer, LogOut
+  FlaskConical, AlertTriangle, ShieldCheck, History, MoreHorizontal, Thermometer, LogOut,
+  QrCode, Receipt
 } from 'lucide-react';
 
 interface PatientQueueProps {
@@ -495,48 +496,77 @@ const PatientQueue: React.FC<PatientQueueProps> = ({ visits, patients, inventory
           );
       }
 
-      // --- BILLING FORM ---
+      // --- BILLING FORM (Updated with eTIMS) ---
       if (activeStage === 'Billing') {
-          const total = calculateTotal(selectedVisit);
+          const subTotal = calculateTotal(selectedVisit);
+          const vat = Math.round(subTotal * 0.16);
+          const grandTotal = subTotal + vat;
+
           return (
              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
                 <div className="bg-white dark:bg-slate-800 w-full max-w-md rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
-                        <CreditCard className="w-5 h-5 text-green-600" /> Finalize Bill
+                        <CreditCard className="w-5 h-5 text-green-600" /> Finalize eTIMS Bill
                     </h3>
-                    <div className="space-y-3 mb-6 bg-slate-50 dark:bg-slate-700/30 p-4 rounded-xl">
+                    <div className="space-y-3 mb-6 bg-slate-50 dark:bg-slate-700/30 p-4 rounded-xl border border-slate-100 dark:border-slate-700">
                         <div className="flex justify-between text-sm">
                             <span className="text-slate-500 dark:text-slate-400">Consultation Fee</span>
-                            <span className="font-bold dark:text-white">KSh {selectedVisit.consultationFee}</span>
+                            <span className="font-medium dark:text-white">KSh {selectedVisit.consultationFee}</span>
                         </div>
                         {selectedVisit.labOrders.length > 0 && (
                              <div className="flex justify-between text-sm">
                                 <span className="text-slate-500 dark:text-slate-400">Lab Tests ({selectedVisit.labOrders.length})</span>
-                                <span className="font-bold dark:text-white">KSh {selectedVisit.labOrders.reduce((a,b)=>a+b.price,0)}</span>
+                                <span className="font-medium dark:text-white">KSh {selectedVisit.labOrders.reduce((a,b)=>a+b.price,0)}</span>
                             </div>
                         )}
                         {selectedVisit.prescription.length > 0 && (
                              <div className="flex justify-between text-sm">
                                 <span className="text-slate-500 dark:text-slate-400">Medication</span>
-                                <span className="font-bold dark:text-white">KSh {selectedVisit.prescription.reduce((a,b)=>a+(b.price*b.quantity),0)}</span>
+                                <span className="font-medium dark:text-white">KSh {selectedVisit.prescription.reduce((a,b)=>a+(b.price*b.quantity),0)}</span>
                             </div>
                         )}
+                        
+                        {/* VAT Calculation for Compliance */}
+                        <div className="border-t border-dashed border-slate-300 dark:border-slate-600 pt-2 mt-2">
+                            <div className="flex justify-between text-sm">
+                                <span className="text-slate-500 dark:text-slate-400">Net Amount</span>
+                                <span className="font-medium dark:text-white">KSh {subTotal}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-slate-500 dark:text-slate-400">VAT (16%)</span>
+                                <span className="font-medium dark:text-white">KSh {vat}</span>
+                            </div>
+                        </div>
+
                         <div className="border-t border-slate-200 dark:border-slate-600 pt-2 mt-2 flex justify-between text-lg font-bold text-slate-900 dark:text-white">
-                            <span>Total</span>
-                            <span>KSh {total}</span>
+                            <span>Grand Total</span>
+                            <span>KSh {grandTotal}</span>
                         </div>
                     </div>
+
+                    {/* eTIMS Simulation */}
+                    <div className="mb-6 p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg flex items-center gap-3">
+                        <div className="w-12 h-12 bg-slate-900 text-white flex items-center justify-center rounded">
+                            <QrCode className="w-8 h-8" />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">KRA eTIMS Validated</p>
+                            <p className="text-xs font-mono text-slate-600 dark:text-slate-300">CU Serial: KRAMW0023881</p>
+                            <p className="text-xs font-mono text-slate-600 dark:text-slate-300">Receipt #: {selectedVisit.id.replace('V', 'ETIMS')}</p>
+                        </div>
+                    </div>
+
                     <div className="flex gap-3">
                         <button onClick={() => setSelectedVisit(null)} className="flex-1 py-3 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl">Cancel</button>
                         <button 
                             onClick={() => {
                                 const nextStage = selectedVisit.prescription.length > 0 ? 'Pharmacy' : 'Clearance';
-                                updateVisit({ ...selectedVisit, totalBill: total, paymentStatus: 'Paid', stage: nextStage });
+                                updateVisit({ ...selectedVisit, totalBill: grandTotal, paymentStatus: 'Paid', stage: nextStage });
                                 setSelectedVisit(null);
                             }}
                             className="flex-1 py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 flex items-center justify-center gap-2"
                         >
-                            <CheckCircle className="w-4 h-4" /> Process Payment
+                            <Receipt className="w-4 h-4" /> Print & Pay
                         </button>
                     </div>
                 </div>

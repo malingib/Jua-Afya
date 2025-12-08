@@ -8,19 +8,19 @@ import {
   Download, Calendar, ChevronDown, TrendingUp, TrendingDown, 
   DollarSign, Users, Activity, FileText, Filter, Printer, 
   Loader2, Sparkles, Smartphone, CreditCard, ShieldCheck, Clock, X, Search,
-  ChevronLeft, ChevronRight, Banknote
+  ChevronLeft, ChevronRight, Banknote, ScrollText, FileSpreadsheet
 } from 'lucide-react';
 
 type TimeRange = '7D' | '30D' | '3M' | '1Y';
-type ReportTab = 'financial' | 'clinical' | 'operational';
+type ReportTab = 'financial' | 'clinical' | 'operational' | 'moh';
 
 const COLORS = {
-  primary: '#0d9488', // Teal 600
-  secondary: '#f59e0b', // Amber 500
-  danger: '#ef4444', // Red 500
-  success: '#10b981', // Emerald 500
-  mpesa: '#16a34a', // Green 600
-  cash: '#64748b', // Slate 500
+  primary: '#3462EE', // Brand Blue
+  secondary: '#EFE347', // Brand Yellow
+  danger: '#ef4444', 
+  success: '#10b981',
+  mpesa: '#16a34a',
+  cash: '#64748b',
   slate: '#94a3b8',
 };
 
@@ -34,6 +34,9 @@ const Reports: React.FC = () => {
   // -- Filter State --
   const [tableSearch, setTableSearch] = useState('');
   const [drillDownFilter, setDrillDownFilter] = useState<{ category: string; value: string } | null>(null);
+
+  // -- MOH State --
+  const [mohFormType, setMohFormType] = useState<'705A' | '705B'>('705A');
 
   // -- Pagination State --
   const [currentPage, setCurrentPage] = useState(1);
@@ -94,10 +97,10 @@ const Reports: React.FC = () => {
   const diseaseData = useMemo(() => {
     const scale = timeRange === '1Y' ? 12 : timeRange === '3M' ? 3 : 1;
     return [
-      { name: 'Malaria', count: Math.floor(185 * scale * (0.8 + Math.random()*0.4)), color: COLORS.secondary }, 
+      { name: 'Malaria', count: Math.floor(185 * scale * (0.8 + Math.random()*0.4)), color: COLORS.primary }, 
       { name: 'Typhoid', count: Math.floor(120 * scale * (0.8 + Math.random()*0.4)), color: COLORS.danger }, 
       { name: 'Respiratory', count: Math.floor(90 * scale * (0.8 + Math.random()*0.4)), color: COLORS.success }, 
-      { name: 'Gastroenteritis', count: Math.floor(65 * scale * (0.8 + Math.random()*0.4)), color: COLORS.primary }, 
+      { name: 'Gastroenteritis', count: Math.floor(65 * scale * (0.8 + Math.random()*0.4)), color: COLORS.secondary }, 
       { name: 'Hypertension', count: Math.floor(45 * scale * (0.8 + Math.random()*0.4)), color: COLORS.cash }, 
     ];
   }, [timeRange]);
@@ -140,7 +143,7 @@ const Reports: React.FC = () => {
                 status: ['Discharged', 'Admitted', 'Follow-up'][Math.floor(Math.random()*3)]
             });
         }
-    } else {
+    } else if (activeTab === 'operational') {
         const categories = ['Appointment', 'Inventory', 'System', 'Staff'];
         for(let i=0; i<count; i++) {
             data.push({
@@ -237,16 +240,17 @@ const Reports: React.FC = () => {
   // -- Sub-components --
 
   const renderAIInsight = () => (
-    <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 p-4 rounded-xl border border-indigo-100 dark:border-indigo-800 mb-6 flex items-start gap-3 animate-in fade-in slide-in-from-top-2 no-print">
-        <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm text-indigo-600 dark:text-indigo-400">
+    <div className="bg-gradient-to-r from-brand-blue/10 to-brand-teal/10 dark:from-blue-900/20 dark:to-teal-900/20 p-4 rounded-xl border border-brand-blue/20 dark:border-blue-800 mb-6 flex items-start gap-3 animate-in fade-in slide-in-from-top-2 no-print">
+        <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm text-brand-blue dark:text-blue-400">
             <Sparkles className="w-5 h-5" />
         </div>
         <div>
-            <h4 className="text-sm font-bold text-indigo-900 dark:text-indigo-200">AI Smart Insight</h4>
-            <p className="text-sm text-indigo-700 dark:text-indigo-300 mt-1">
+            <h4 className="text-sm font-bold text-brand-dark dark:text-blue-200">AI Smart Insight</h4>
+            <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
                 {activeTab === 'financial' && `Revenue is trending ${timeRange === '7D' ? 'stable' : 'upwards'} compared to previous periods. M-Pesa remains the dominant payment channel (${paymentMethodData[0].value}%).`}
                 {activeTab === 'clinical' && `Malaria cases account for approx ${(diseaseData[0].count / (diseaseData.reduce((a,b)=>a+b.count,0))) * 100 | 0}% of visits this period. Consider verifying stock of anti-malarials.`}
                 {activeTab === 'operational' && `Appointment completion rate is at ${operationalData[0].value}%. No-shows are higher on Mondays.`}
+                {activeTab === 'moh' && `Data quality for MOH 705A is at 98%. Ensure all 'Under 5' weights are recorded to reach 100% compliance.`}
             </p>
         </div>
     </div>
@@ -472,6 +476,92 @@ const Reports: React.FC = () => {
     </div>
   );
 
+  const renderMohReport = () => {
+      // Mock MOH Data Aggregation
+      const mohData = [
+          { code: '15', disease: 'Malaria (Confirmed)', newCases: 45, reVisits: 2, referrals: 0 },
+          { code: '18', disease: 'Diarrhoea', newCases: 23, reVisits: 0, referrals: 1 },
+          { code: '21', disease: 'Pneumonia', newCases: 12, reVisits: 1, referrals: 0 },
+          { code: '22', disease: 'Upper Respiratory Tract Infection', newCases: 67, reVisits: 5, referrals: 0 },
+          { code: '24', disease: 'Tonsillitis', newCases: 15, reVisits: 0, referrals: 0 },
+          { code: '36', disease: 'Urinary Tract Infection', newCases: 19, reVisits: 2, referrals: 0 },
+          { code: '39', disease: 'Hypertension', newCases: 8, reVisits: 32, referrals: 1 },
+          { code: '40', disease: 'Diabetes', newCases: 4, reVisits: 18, referrals: 0 },
+      ];
+
+      return (
+          <div className="space-y-6 animate-in fade-in">
+              {renderAIInsight()}
+              
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
+                  <div>
+                      <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                          <ScrollText className="w-5 h-5 text-green-600" />
+                          Ministry of Health Reporting (MOH 705)
+                      </h3>
+                      <p className="text-sm text-slate-500 mt-1">
+                          Automated generation of monthly outpatient summary forms.
+                      </p>
+                  </div>
+                  <div className="flex bg-slate-100 dark:bg-slate-700 p-1 rounded-xl">
+                      <button 
+                        onClick={() => setMohFormType('705A')}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${mohFormType === '705A' ? 'bg-white dark:bg-slate-600 shadow text-green-700 dark:text-green-400' : 'text-slate-500'}`}
+                      >
+                          MOH 705A (Under 5)
+                      </button>
+                      <button 
+                        onClick={() => setMohFormType('705B')}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${mohFormType === '705B' ? 'bg-white dark:bg-slate-600 shadow text-green-700 dark:text-green-400' : 'text-slate-500'}`}
+                      >
+                          MOH 705B (Over 5)
+                      </button>
+                  </div>
+              </div>
+
+              <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+                  <div className="p-4 bg-green-50 dark:bg-green-900/20 border-b border-green-100 dark:border-green-900 flex justify-between items-center">
+                      <h4 className="font-bold text-green-800 dark:text-green-300 text-sm uppercase tracking-wide">
+                          {mohFormType === '705A' ? 'Outpatient Register - Under 5 Years' : 'Outpatient Register - Over 5 Years'}
+                      </h4>
+                      <button className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                          <FileSpreadsheet className="w-4 h-4" /> Download Excel
+                      </button>
+                  </div>
+                  <table className="w-full text-left text-sm border-collapse">
+                      <thead className="bg-slate-50 dark:bg-slate-700/50 text-xs uppercase text-slate-500 dark:text-slate-400 font-semibold">
+                          <tr>
+                              <th className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 border-r w-24">Code</th>
+                              <th className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 border-r">Disease / Condition</th>
+                              <th className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 border-r text-center bg-slate-50/50 dark:bg-slate-800/50">New Cases</th>
+                              <th className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 border-r text-center bg-slate-50/50 dark:bg-slate-800/50">Re-Visits</th>
+                              <th className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 text-center bg-slate-50/50 dark:bg-slate-800/50">Referrals In</th>
+                          </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                          {mohData.map((row, i) => (
+                              <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                                  <td className="px-6 py-3 border-r border-slate-100 dark:border-slate-700 font-mono font-bold text-slate-400">{row.code}</td>
+                                  <td className="px-6 py-3 border-r border-slate-100 dark:border-slate-700 font-medium text-slate-900 dark:text-white">{row.disease}</td>
+                                  <td className="px-6 py-3 border-r border-slate-100 dark:border-slate-700 text-center font-bold text-slate-700 dark:text-slate-300">{row.newCases}</td>
+                                  <td className="px-6 py-3 border-r border-slate-100 dark:border-slate-700 text-center text-slate-500">{row.reVisits}</td>
+                                  <td className="px-6 py-3 text-center text-slate-500">{row.referrals}</td>
+                              </tr>
+                          ))}
+                          <tr className="bg-slate-50 dark:bg-slate-700/30 font-bold">
+                              <td className="px-6 py-3 border-r border-slate-200 dark:border-slate-700">TOTAL</td>
+                              <td className="px-6 py-3 border-r border-slate-200 dark:border-slate-700">ALL DIAGNOSES</td>
+                              <td className="px-6 py-3 border-r border-slate-200 dark:border-slate-700 text-center">{mohData.reduce((a,b)=>a+b.newCases,0)}</td>
+                              <td className="px-6 py-3 border-r border-slate-200 dark:border-slate-700 text-center">{mohData.reduce((a,b)=>a+b.reVisits,0)}</td>
+                              <td className="px-6 py-3 text-center">{mohData.reduce((a,b)=>a+b.referrals,0)}</td>
+                          </tr>
+                      </tbody>
+                  </table>
+              </div>
+          </div>
+      );
+  }
+
   return (
     <div className="p-6 md:p-10 bg-gray-50 dark:bg-slate-900 min-h-screen transition-colors duration-200" onClick={() => setIsTimeMenuOpen(false)}>
       
@@ -479,7 +569,7 @@ const Reports: React.FC = () => {
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 mb-8 no-print">
         <div>
           <h2 className="text-3xl font-bold text-slate-900 dark:text-white">Reports & Analytics</h2>
-          <p className="text-slate-500 dark:text-slate-400 mt-1">Enterprise insights for your clinic</p>
+          <p className="text-slate-500 dark:text-slate-400 mt-1">Enterprise insights & compliance for your clinic</p>
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
@@ -527,7 +617,7 @@ const Reports: React.FC = () => {
              <button 
                 onClick={handleExportCSV}
                 disabled={isExporting}
-                className="bg-teal-600 text-white flex items-center gap-2 px-5 py-2.5 rounded-xl hover:bg-teal-700 shadow-lg shadow-teal-200 dark:shadow-none text-sm font-bold transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+                className="bg-brand-blue text-white flex items-center gap-2 px-5 py-2.5 rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200 dark:shadow-none text-sm font-bold transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
              >
                 {isExporting ? <Loader2 className="w-4 h-4 animate-spin"/> : <Download className="w-4 h-4" />}
                 {isExporting ? 'Exporting...' : 'Export CSV'}
@@ -540,7 +630,8 @@ const Reports: React.FC = () => {
           {[
               { id: 'financial', label: 'Financial', icon: DollarSign },
               { id: 'clinical', label: 'Clinical', icon: Activity },
-              { id: 'operational', label: 'Operational', icon: FileText }
+              { id: 'operational', label: 'Operational', icon: FileText },
+              { id: 'moh', label: 'MOH Compliance', icon: ScrollText }
           ].map(tab => (
               <button
                 key={tab.id}
@@ -592,112 +683,115 @@ const Reports: React.FC = () => {
               {activeTab === 'financial' && renderFinancialTab()}
               {activeTab === 'clinical' && renderClinicalTab()}
               {activeTab === 'operational' && renderOperationalTab()}
+              {activeTab === 'moh' && renderMohReport()}
           </div>
 
-          {/* Detailed Data Table (Common) */}
-          <div id="reports-table" className="mt-8 bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden animate-in fade-in slide-in-from-bottom-8 duration-700">
-              <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                      <FileText className="w-5 h-5 text-slate-400" />
-                      {activeTab === 'financial' ? 'Transactions' : activeTab === 'clinical' ? 'Patient Visits' : 'Activity Logs'}
-                  </h3>
-                  <div className="flex items-center gap-3 no-print">
-                      <div className="relative">
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                          <input 
-                              placeholder="Search records..." 
-                              value={tableSearch}
-                              onChange={(e) => setTableSearch(e.target.value)}
-                              className="pl-9 pr-8 py-2 bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-lg text-sm outline-none focus:ring-2 focus:ring-teal-500 w-full sm:w-64 dark:text-white" 
-                          />
-                          {tableSearch && (
-                              <button onClick={() => setTableSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                                  <X className="w-3.5 h-3.5" />
-                              </button>
-                          )}
-                      </div>
-                  </div>
-              </div>
-              <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                      <thead className="bg-slate-50 dark:bg-slate-700/50 text-xs uppercase text-slate-400 font-semibold border-b border-slate-100 dark:border-slate-700">
-                          <tr>
-                              <th className="px-6 py-4">ID</th>
-                              <th className="px-6 py-4">Date</th>
-                              <th className="px-6 py-4">
-                                  {activeTab === 'financial' ? 'Description' : activeTab === 'clinical' ? 'Patient' : 'User'}
-                              </th>
-                              <th className="px-6 py-4">
-                                  {activeTab === 'financial' ? 'Method' : activeTab === 'clinical' ? 'Diagnosis' : 'Category'}
-                              </th>
-                              <th className="px-6 py-4">
-                                  {activeTab === 'financial' ? 'Amount' : activeTab === 'clinical' ? 'Doctor' : 'Details'}
-                              </th>
-                              <th className="px-6 py-4 text-center">Status</th>
-                          </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-50 dark:divide-slate-700">
-                          {paginatedTableData.length > 0 ? paginatedTableData.map((row: any, i) => (
-                              <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                                  <td className="px-6 py-4 font-mono text-xs text-slate-500 dark:text-slate-400">{row.id}</td>
-                                  <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{row.col1}</td>
-                                  <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">{row.col2}</td>
-                                  <td className="px-6 py-4">
-                                      {activeTab === 'financial' ? (
-                                          <span className={`flex items-center gap-1.5 ${row.col3 === 'M-Pesa' ? 'text-green-600 font-bold' : row.col3 === 'Cash' ? 'text-slate-600' : 'text-indigo-600'}`}>
-                                              {row.col3 === 'M-Pesa' && <Smartphone className="w-3.5 h-3.5" />}
-                                              {row.col3}
-                                          </span>
-                                      ) : (
-                                          <span className="text-slate-600 dark:text-slate-300">{row.col3}</span>
-                                      )}
-                                  </td>
-                                  <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200">
-                                      {activeTab === 'financial' ? `KSh ${row.col4}` : row.col4}
-                                  </td>
-                                  <td className="px-6 py-4 text-center">
-                                      <span className="px-2 py-1 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-md text-xs font-bold border border-green-100 dark:border-green-900/30">
-                                          {row.status}
-                                      </span>
-                                  </td>
-                              </tr>
-                          )) : (
-                              <tr>
-                                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
-                                      <Filter className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                                      <p>No records found matching your filters.</p>
-                                  </td>
-                              </tr>
-                          )}
-                      </tbody>
-                  </table>
-              </div>
+          {/* Detailed Data Table (Common) - Hide for MOH as it has its own table */}
+          {activeTab !== 'moh' && (
+            <div id="reports-table" className="mt-8 bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden animate-in fade-in slide-in-from-bottom-8 duration-700">
+                <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <FileText className="w-5 h-5 text-slate-400" />
+                        {activeTab === 'financial' ? 'Transactions' : activeTab === 'clinical' ? 'Patient Visits' : 'Activity Logs'}
+                    </h3>
+                    <div className="flex items-center gap-3 no-print">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                            <input 
+                                placeholder="Search records..." 
+                                value={tableSearch}
+                                onChange={(e) => setTableSearch(e.target.value)}
+                                className="pl-9 pr-8 py-2 bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-lg text-sm outline-none focus:ring-2 focus:ring-teal-500 w-full sm:w-64 dark:text-white" 
+                            />
+                            {tableSearch && (
+                                <button onClick={() => setTableSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                    <X className="w-3.5 h-3.5" />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-slate-50 dark:bg-slate-700/50 text-xs uppercase text-slate-400 font-semibold border-b border-slate-100 dark:border-slate-700">
+                            <tr>
+                                <th className="px-6 py-4">ID</th>
+                                <th className="px-6 py-4">Date</th>
+                                <th className="px-6 py-4">
+                                    {activeTab === 'financial' ? 'Description' : activeTab === 'clinical' ? 'Patient' : 'User'}
+                                </th>
+                                <th className="px-6 py-4">
+                                    {activeTab === 'financial' ? 'Method' : activeTab === 'clinical' ? 'Diagnosis' : 'Category'}
+                                </th>
+                                <th className="px-6 py-4">
+                                    {activeTab === 'financial' ? 'Amount' : activeTab === 'clinical' ? 'Doctor' : 'Details'}
+                                </th>
+                                <th className="px-6 py-4 text-center">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50 dark:divide-slate-700">
+                            {paginatedTableData.length > 0 ? paginatedTableData.map((row: any, i) => (
+                                <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                                    <td className="px-6 py-4 font-mono text-xs text-slate-500 dark:text-slate-400">{row.id}</td>
+                                    <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{row.col1}</td>
+                                    <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">{row.col2}</td>
+                                    <td className="px-6 py-4">
+                                        {activeTab === 'financial' ? (
+                                            <span className={`flex items-center gap-1.5 ${row.col3 === 'M-Pesa' ? 'text-green-600 font-bold' : row.col3 === 'Cash' ? 'text-slate-600' : 'text-indigo-600'}`}>
+                                                {row.col3 === 'M-Pesa' && <Smartphone className="w-3.5 h-3.5" />}
+                                                {row.col3}
+                                            </span>
+                                        ) : (
+                                            <span className="text-slate-600 dark:text-slate-300">{row.col3}</span>
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200">
+                                        {activeTab === 'financial' ? `KSh ${row.col4}` : row.col4}
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                        <span className="px-2 py-1 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-md text-xs font-bold border border-green-100 dark:border-green-900/30">
+                                            {row.status}
+                                        </span>
+                                    </td>
+                                </tr>
+                            )) : (
+                                <tr>
+                                    <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
+                                        <Filter className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                                        <p>No records found matching your filters.</p>
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
 
-              {/* Pagination Controls */}
-              {totalPages > 1 && (
-                  <div className="p-4 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
-                      <div className="text-sm text-slate-500 dark:text-slate-400">
-                          Showing page {currentPage} of {totalPages}
-                      </div>
-                      <div className="flex gap-2">
-                          <button 
-                              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                              disabled={currentPage === 1}
-                              className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-600 dark:text-slate-300"
-                          >
-                              <ChevronLeft className="w-4 h-4" />
-                          </button>
-                          <button 
-                              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                              disabled={currentPage === totalPages}
-                              className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-600 dark:text-slate-300"
-                          >
-                              <ChevronRight className="w-4 h-4" />
-                          </button>
-                      </div>
-                  </div>
-              )}
-          </div>
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                    <div className="p-4 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                        <div className="text-sm text-slate-500 dark:text-slate-400">
+                            Showing page {currentPage} of {totalPages}
+                        </div>
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                disabled={currentPage === 1}
+                                className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-600 dark:text-slate-300"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            <button 
+                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                disabled={currentPage === totalPages}
+                                className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-600 dark:text-slate-300"
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+          )}
       </div>
     </div>
   );

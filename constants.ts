@@ -1,5 +1,5 @@
 
-import { Patient, Appointment, InventoryItem, Gender, Supplier, InventoryLog, Visit, LabTestProfile, Clinic, ApprovalRequest, SaaSTransaction, SystemLog } from './types';
+import { Patient, Appointment, InventoryItem, Gender, Supplier, InventoryLog, Visit, LabTestProfile, Clinic, ApprovalRequest, SaaSTransaction, SystemLog, SupportTicket } from './types';
 
 export const MOCK_PATIENTS: Patient[] = [
   {
@@ -148,4 +148,10 @@ export const MOCK_SYSTEM_LOGS: SystemLog[] = [
     { id: 'SL-003', action: 'Pricing Update', admin: 'System Owner', target: 'Pro Plan', timestamp: '2023-10-25T09:15:00Z', status: 'Success' },
     { id: 'SL-004', action: 'Failed Login', admin: 'Unknown IP', target: 'Admin Portal', timestamp: '2023-10-24T22:10:00Z', status: 'Error' },
     { id: 'SL-005', action: 'Provision Clinic', admin: 'System Owner', target: 'Sunrise Medical', timestamp: '2023-03-10T10:00:00Z', status: 'Success' },
+];
+
+export const MOCK_TICKETS: SupportTicket[] = [
+    { id: 'TK-1024', clinicName: 'JuaAfya Downtown', subject: 'SMS Gateway Timeout', priority: 'High', status: 'Open', dateCreated: '2023-10-28', lastUpdate: '10 mins ago' },
+    { id: 'TK-1023', clinicName: 'Sunrise Medical', subject: 'Report Export Issues', priority: 'Medium', status: 'In Progress', dateCreated: '2023-10-27', lastUpdate: '2 hours ago' },
+    { id: 'TK-1020', clinicName: 'Mombasa Road Clinic', subject: 'How to add new staff?', priority: 'Low', status: 'Resolved', dateCreated: '2023-10-25', lastUpdate: '1 day ago' },
 ];

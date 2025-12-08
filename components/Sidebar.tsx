@@ -4,7 +4,7 @@ import { ViewState, TeamMember } from '../types';
 import { 
   LayoutDashboard, Users, Calendar, Pill, Settings, HelpCircle, 
   Activity, MessageSquare, ClipboardList, Stethoscope, TestTube, CreditCard, 
-  ShieldCheck, Building2, CheckCircle, DollarSign, Menu, X, Smartphone
+  ShieldCheck, Building2, CheckCircle, DollarSign, Menu, X, Smartphone, LogOut, LifeBuoy
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -15,9 +15,10 @@ interface SidebarProps {
   switchUser: (member: TeamMember) => void;
   team: TeamMember[];
   systemAdmin: TeamMember;
+  onLogout?: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, lowStockCount = 0, currentUser, switchUser, team, systemAdmin }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, lowStockCount = 0, currentUser, switchUser, team, systemAdmin, onLogout }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -28,6 +29,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, lowStockCount =
     { id: 'sa-clinics', label: 'Clinics', icon: Building2, roles: ['SuperAdmin'] },
     { id: 'sa-approvals', label: 'Approvals', icon: CheckCircle, roles: ['SuperAdmin'] },
     { id: 'sa-payments', label: 'Financials', icon: DollarSign, roles: ['SuperAdmin'] },
+    { id: 'sa-support', label: 'Helpdesk', icon: LifeBuoy, roles: ['SuperAdmin'] },
     { id: 'sa-settings', label: 'Global Settings', icon: Settings, roles: ['SuperAdmin'] },
     
     // Clinic Views (Not for SuperAdmin)
@@ -64,13 +66,13 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, lowStockCount =
       <div className="hidden md:flex flex-col w-64 bg-sidebar text-white fixed left-4 top-4 bottom-4 rounded-3xl z-20 shadow-2xl overflow-hidden no-print transition-all duration-300">
         {/* Logo Area */}
         <div className="p-8 flex items-center space-x-3 mb-2">
-            <div className="relative">
-                 {currentUser.role === 'SuperAdmin' ? (
-                     <ShieldCheck className="w-8 h-8 text-indigo-400" />
-                 ) : (
-                     <Activity className="w-8 h-8 text-white" />
-                 )}
-                 <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full"></div>
+            <div className="relative w-10 h-10 flex items-center justify-center">
+                 {/* JuaAfya Logo SVG */}
+                 <svg viewBox="0 0 24 24" fill="none" className="w-full h-full">
+                    <path d="M12 2V4M12 20V22M4.93 4.93L6.34 6.34M17.66 17.66L19.07 19.07M2 12H4M20 12H22M6.34 17.66L4.93 19.07M19.07 4.93L17.66 6.34" stroke="#EFE347" strokeWidth="2.5" strokeLinecap="round" />
+                    <circle cx="12" cy="12" r="6" fill="#3462EE" />
+                    <path d="M12 9V15M9 12H15" stroke="white" strokeWidth="2" strokeLinecap="round" />
+                 </svg>
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-white leading-none">
@@ -164,6 +166,16 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, lowStockCount =
                             </div>
                             {currentUser.id === systemAdmin.id && <div className="ml-auto w-2 h-2 rounded-full bg-indigo-600"></div>}
                          </button>
+
+                         <div className="h-px bg-slate-100 my-1"></div>
+
+                         <button 
+                            onClick={onLogout}
+                            className="w-full flex items-center p-3 hover:bg-red-50 text-red-600 transition-colors"
+                         >
+                             <LogOut className="w-4 h-4 mr-3" />
+                             <span className="text-sm font-bold">Log Out</span>
+                         </button>
                      </div>
                  )}
              </div>
@@ -175,10 +187,15 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, lowStockCount =
           <div className="fixed inset-0 z-50 md:hidden flex flex-col bg-sidebar text-white animate-in slide-in-from-bottom-full duration-300">
               <div className="p-6 flex items-center justify-between border-b border-white/10">
                   <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
-                          {currentUser.role === 'SuperAdmin' ? <ShieldCheck className="w-6 h-6 text-indigo-400" /> : <Activity className="w-6 h-6 text-green-400" />}
+                      <div className="w-10 h-10 flex items-center justify-center">
+                          {/* Logo SVG */}
+                          <svg viewBox="0 0 24 24" fill="none" className="w-full h-full">
+                            <path d="M12 2V4M12 20V22M4.93 4.93L6.34 6.34M17.66 17.66L19.07 19.07M2 12H4M20 12H22M6.34 17.66L4.93 19.07M19.07 4.93L17.66 6.34" stroke="#EFE347" strokeWidth="2.5" strokeLinecap="round" />
+                            <circle cx="12" cy="12" r="6" fill="#3462EE" />
+                            <path d="M12 9V15M9 12H15" stroke="white" strokeWidth="2" strokeLinecap="round" />
+                          </svg>
                       </div>
-                      <span className="text-xl font-bold">Menu</span>
+                      <span className="text-xl font-bold">JuaAfya</span>
                   </div>
                   <button onClick={() => setMobileMenuOpen(false)} className="p-2 bg-white/10 rounded-full">
                       <X className="w-6 h-6" />
@@ -197,6 +214,16 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, lowStockCount =
                           {item.label}
                       </button>
                   ))}
+                  
+                  <div className="h-px bg-white/10 my-4"></div>
+                  
+                  <button 
+                      onClick={onLogout}
+                      className="flex items-center w-full px-6 py-4 rounded-xl text-red-400 hover:text-white hover:bg-white/10 transition-all"
+                  >
+                      <LogOut className="w-5 h-5 mr-4" />
+                      Log Out
+                  </button>
               </div>
           </div>
       )}

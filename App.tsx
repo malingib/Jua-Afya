@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
@@ -13,6 +12,7 @@ import BulkSMS from './components/BulkSMS';
 import PatientQueue from './components/PatientQueue';
 import SuperAdminDashboard from './components/SuperAdminDashboard';
 import WhatsAppAgent from './components/WhatsAppAgent';
+import Login from './components/Login';
 import { ViewState, Patient, Appointment, InventoryItem, ClinicSettings, Notification, Supplier, InventoryLog, Visit, VisitPriority, TeamMember } from './types';
 import { MOCK_PATIENTS, MOCK_APPOINTMENTS, MOCK_INVENTORY, MOCK_SUPPLIERS, MOCK_LOGS, MOCK_VISITS } from './constants';
 import { CheckCircle, AlertCircle, X } from 'lucide-react';
@@ -125,8 +125,37 @@ const App: React.FC = () => {
       ]
   });
 
-  // -- User Session State (Simulated) --
-  const [currentUser, setCurrentUser] = useState<TeamMember>(settings.team[0]);
+  // -- User Session State --
+  // We use standard useState here but initialized from localStorage if available
+  const [currentUser, setCurrentUser] = useState<TeamMember | null>(() => {
+      const savedUser = localStorage.getItem('currentUser');
+      return savedUser ? JSON.parse(savedUser) : null;
+  });
+
+  useEffect(() => {
+      if (currentUser) {
+          localStorage.setItem('currentUser', JSON.stringify(currentUser));
+      } else {
+          localStorage.removeItem('currentUser');
+      }
+  }, [currentUser]);
+
+  const handleLogin = (member: TeamMember) => {
+      setCurrentUser(member);
+      // Determine default view based on role
+      if (member.role === 'SuperAdmin') setCurrentView('sa-overview');
+      else if (member.role === 'Doctor') setCurrentView('consultation');
+      else if (member.role === 'Nurse') setCurrentView('triage');
+      else if (member.role === 'Receptionist') setCurrentView('reception');
+      else setCurrentView('dashboard');
+      
+      showToast(`Welcome back, ${member.name.split(' ')[0]}!`);
+  };
+
+  const handleLogout = () => {
+      setCurrentUser(null);
+      showToast('You have been logged out.', 'info');
+  };
 
   const switchUser = (member: TeamMember) => {
       setCurrentUser(member);
@@ -181,7 +210,7 @@ const App: React.FC = () => {
           quantityChange,
           notes,
           timestamp: new Date().toISOString(),
-          user: currentUser.name // Use actual logged in user
+          user: currentUser?.name || 'System'
       };
       setInventoryLogs(prev => [log, ...prev]);
   };
@@ -322,6 +351,8 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
+    if (!currentUser) return null;
+
     // Shared Props
     const queueProps = {
         visits,
@@ -334,7 +365,7 @@ const App: React.FC = () => {
 
     switch (currentView) {
       case 'dashboard':
-        return <Dashboard appointments={appointments} inventory={inventory} patients={patients} setView={setCurrentView} />;
+        return <Dashboard appointments={appointments} inventory={inventory} patients={patients} setView={setCurrentView} onLogout={handleLogout} />;
       
       // -- DEPARTMENTAL VIEWS (Dashboard-to-Dashboard workflow) --
       case 'reception':
@@ -354,6 +385,7 @@ const App: React.FC = () => {
       case 'sa-approvals':
       case 'sa-payments':
       case 'sa-settings':
+      case 'sa-support': // Added missing case
         const tab = currentView.replace('sa-', '') as any;
         return <SuperAdminDashboard currentUser={currentUser} switchUser={switchUser} team={settings.team} activeTab={tab} />;
 
@@ -410,6 +442,28 @@ const App: React.FC = () => {
     }
   };
 
+  // If not logged in, show Login Screen
+  if (!currentUser) {
+      return (
+          <>
+            <Login onLogin={handleLogin} team={settings.team} systemAdmin={SYSTEM_ADMIN} />
+            {/* Toast Notifications container for Login screen */}
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 no-print">
+                {toasts.map(toast => (
+                    <div key={toast.id} className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border animate-in slide-in-from-bottom-5 fade-in duration-300 ${
+                        toast.type === 'success' ? 'bg-white dark:bg-slate-800 border-green-200 dark:border-green-900 text-green-700 dark:text-green-400' :
+                        toast.type === 'error' ? 'bg-white dark:bg-slate-800 border-red-200 dark:border-red-900 text-red-700 dark:text-red-400' :
+                        'bg-white dark:bg-slate-800 border-blue-200 dark:border-blue-900 text-blue-700 dark:text-blue-400'
+                    }`}>
+                        {toast.type === 'success' ? <CheckCircle className="w-5 h-5" /> : toast.type === 'error' ? <X className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+                        <span className="text-sm font-medium">{toast.message}</span>
+                    </div>
+                ))}
+            </div>
+          </>
+      );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex transition-colors duration-200 font-sans">
       {/* Navigation */}
@@ -421,13 +475,24 @@ const App: React.FC = () => {
         switchUser={switchUser}
         team={settings.team}
         systemAdmin={SYSTEM_ADMIN}
+        onLogout={handleLogout}
       />
 
       {/* Main Content Area */}
       <main className="flex-1 md:ml-64 lg:ml-72 w-full transition-all duration-300">
         {/* Mobile Header */}
         <div className="md:hidden bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 sticky top-0 z-10 flex items-center justify-between no-print">
-           <h1 className="font-bold text-lg text-slate-800 dark:text-white">Jua<span className="text-brand-500">Afya</span></h1>
+           <div className="flex items-center gap-2">
+               {/* Logo SVG */}
+                <div className="w-8 h-8 flex items-center justify-center">
+                    <svg viewBox="0 0 24 24" fill="none" className="w-full h-full">
+                        <path d="M12 2V4M12 20V22M4.93 4.93L6.34 6.34M17.66 17.66L19.07 19.07M2 12H4M20 12H22M6.34 17.66L4.93 19.07M19.07 4.93L17.66 6.34" stroke="#EFE347" strokeWidth="2.5" strokeLinecap="round" />
+                        <circle cx="12" cy="12" r="6" fill="#3462EE" />
+                        <path d="M12 9V15M9 12H15" stroke="white" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                </div>
+                <h1 className="font-bold text-lg text-slate-800 dark:text-white">JuaAfya</h1>
+           </div>
            <div className="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center text-brand-600 font-bold text-xs">
               {currentUser.name.substring(0,2)}
            </div>

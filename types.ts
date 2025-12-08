@@ -258,6 +258,16 @@ export interface SystemLog {
     status: 'Success' | 'Warning' | 'Error';
 }
 
+export interface SupportTicket {
+    id: string;
+    clinicName: string;
+    subject: string;
+    priority: 'Low' | 'Medium' | 'High' | 'Critical';
+    status: 'Open' | 'In Progress' | 'Resolved';
+    dateCreated: string;
+    lastUpdate: string;
+}
+
 export type ViewState = 
   | 'dashboard' 
   | 'reception'   // Reception Dashboard
@@ -278,4 +288,5 @@ export type ViewState =
   | 'sa-clinics'
   | 'sa-approvals'
   | 'sa-payments'
+  | 'sa-support'
   | 'sa-settings';

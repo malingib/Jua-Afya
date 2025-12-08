@@ -1,9 +1,4 @@
 
-
-
-
-
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { InventoryItem, Supplier, InventoryLog, Visit } from '../types';
 import { 
@@ -11,7 +6,7 @@ import {
   Trash2, Download, ArrowUpDown, RefreshCw, DollarSign, ChevronDown, 
   AlertTriangle, History, ChevronLeft, ChevronRight, CheckSquare, Square,
   Truck, Calendar, ClipboardList, Briefcase, Mail, Phone, Tag, Building, CheckCircle,
-  Pill, ArrowRight
+  Pill, ArrowRight, Receipt, Printer, QrCode
 } from 'lucide-react';
 
 interface PharmacyProps {
@@ -31,7 +26,7 @@ interface PharmacyProps {
 type SortField = 'name' | 'stock' | 'price' | 'category' | 'expiryDate';
 type SortDirection = 'asc' | 'desc';
 type StockFilter = 'All' | 'Low' | 'Out' | 'Good' | 'Expiring';
-type Tab = 'prescriptions' | 'inventory' | 'suppliers' | 'alerts' | 'logs';
+type Tab = 'prescriptions' | 'inventory' | 'suppliers' | 'alerts' | 'logs' | 'invoices';
 
 const Pharmacy: React.FC<PharmacyProps> = ({ 
     inventory, suppliers, logs, visits = [], onDispense,
@@ -58,10 +53,12 @@ const Pharmacy: React.FC<PharmacyProps> = ({
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [isRestockModalOpen, setIsRestockModalOpen] = useState(false);
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [selectedItemForRestock, setSelectedItemForRestock] = useState<InventoryItem | null>(null);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const [selectedInvoiceVisit, setSelectedInvoiceVisit] = useState<Visit | null>(null);
   
   // -- Forms --
   const [restockForm, setRestockForm] = useState({ amount: '', batch: '', expiry: '' });
@@ -205,6 +202,11 @@ const Pharmacy: React.FC<PharmacyProps> = ({
       setRestockForm({ amount: '', batch: item.batchNumber || '', expiry: item.expiryDate || '' });
       setIsRestockModalOpen(true);
   };
+
+  const openInvoiceModal = (visit: Visit) => {
+      setSelectedInvoiceVisit(visit);
+      setIsInvoiceModalOpen(true);
+  }
 
   const handleRestockSubmit = (e: React.FormEvent) => {
       e.preventDefault();
@@ -396,6 +398,74 @@ const Pharmacy: React.FC<PharmacyProps> = ({
         </div>
     );
   };
+
+  const renderInvoicesTab = () => {
+      // Completed visits that had a prescription
+      const completedVisits = visits.filter(v => 
+          (v.stage === 'Clearance' || v.stage === 'Completed') && v.prescription.length > 0
+      );
+
+      return (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white">Generated Invoices</h3>
+                  <div className="flex items-center gap-2 text-sm text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg">
+                      <Receipt className="w-4 h-4"/> eTIMS Compliant
+                  </div>
+              </div>
+
+              <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+                  <table className="w-full text-left text-sm">
+                      <thead className="bg-slate-50 dark:bg-slate-700/50 text-xs uppercase text-slate-400 font-semibold border-b border-slate-100 dark:border-slate-700">
+                          <tr>
+                              <th className="px-6 py-4">Receipt #</th>
+                              <th className="px-6 py-4">Date</th>
+                              <th className="px-6 py-4">Patient</th>
+                              <th className="px-6 py-4">Items</th>
+                              <th className="px-6 py-4">Total Amount</th>
+                              <th className="px-6 py-4 text-right">Action</th>
+                          </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                          {completedVisits.map(visit => {
+                              const total = visit.totalBill; // Using the billed total
+                              return (
+                                  <tr key={visit.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                                      <td className="px-6 py-4 font-mono text-xs text-slate-500">
+                                          {visit.id.replace('V', 'INV-')}
+                                      </td>
+                                      <td className="px-6 py-4 text-slate-600 dark:text-slate-300">
+                                          {new Date(visit.startTime).toLocaleDateString()}
+                                      </td>
+                                      <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">
+                                          {visit.patientName}
+                                      </td>
+                                      <td className="px-6 py-4">
+                                          {visit.prescription.length} Meds
+                                      </td>
+                                      <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">
+                                          KSh {total.toLocaleString()}
+                                      </td>
+                                      <td className="px-6 py-4 text-right">
+                                          <button 
+                                            onClick={() => openInvoiceModal(visit)}
+                                            className="text-teal-600 hover:text-teal-800 dark:text-teal-400 font-bold text-xs flex items-center justify-end gap-1"
+                                          >
+                                              <Receipt className="w-3 h-3" /> View Receipt
+                                          </button>
+                                      </td>
+                                  </tr>
+                              );
+                          })}
+                          {completedVisits.length === 0 && (
+                              <tr><td colSpan={6} className="p-8 text-center text-slate-400">No invoices generated yet.</td></tr>
+                          )}
+                      </tbody>
+                  </table>
+              </div>
+          </div>
+      );
+  }
 
   const renderInventoryTab = () => (
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -761,6 +831,7 @@ const Pharmacy: React.FC<PharmacyProps> = ({
         <div className="flex items-center gap-2 mb-8 bg-slate-100 dark:bg-slate-800/50 p-1 rounded-xl w-fit overflow-x-auto max-w-full">
             {[
                 { id: 'prescriptions', label: 'Prescriptions', icon: ClipboardList },
+                { id: 'invoices', label: 'eTIMS Invoices', icon: Receipt },
                 { id: 'inventory', label: 'Inventory List', icon: Package },
                 { id: 'alerts', label: 'Alerts', icon: AlertTriangle },
                 { id: 'suppliers', label: 'Suppliers', icon: Truck },
@@ -789,6 +860,7 @@ const Pharmacy: React.FC<PharmacyProps> = ({
 
         {/* Content Area */}
         {activeTab === 'prescriptions' && renderPrescriptionsTab()}
+        {activeTab === 'invoices' && renderInvoicesTab()}
         {activeTab === 'inventory' && renderInventoryTab()}
         {activeTab === 'suppliers' && renderSuppliersTab()}
         {activeTab === 'logs' && renderLogsTab()}
@@ -796,6 +868,118 @@ const Pharmacy: React.FC<PharmacyProps> = ({
 
         {/* Modals */}
         
+        {/* Invoice Generation Modal */}
+        {isInvoiceModalOpen && selectedInvoiceVisit && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md animate-in fade-in">
+                <div className="bg-white w-full max-w-sm rounded-none shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+                    {/* Thermal Receipt Header */}
+                    <div className="p-6 pb-2 text-center bg-white text-slate-900 border-b-2 border-dashed border-slate-300">
+                        <h2 className="text-xl font-bold uppercase tracking-wide">JuaAfya Clinic</h2>
+                        <p className="text-xs font-mono mt-1">P.O. Box 12345-00100, Nairobi</p>
+                        <p className="text-xs font-mono">Tel: +254 712 345 678</p>
+                        <p className="text-xs font-mono mt-2">PIN: P051234567Z</p>
+                        <p className="text-xs font-mono">CU Serial: KRAMW0023881</p>
+                    </div>
+
+                    {/* Receipt Body */}
+                    <div className="p-6 py-4 flex-1 overflow-y-auto bg-white font-mono text-sm text-slate-800">
+                        <div className="flex justify-between mb-4 border-b border-slate-200 pb-2">
+                            <span>Date: {new Date(selectedInvoiceVisit.startTime).toLocaleDateString()}</span>
+                            <span>Time: {new Date(selectedInvoiceVisit.startTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                        </div>
+                        <div className="mb-4">
+                            <p className="font-bold">Patient: {selectedInvoiceVisit.patientName}</p>
+                            <p className="text-xs">Receipt #: {selectedInvoiceVisit.id.replace('V', 'INV')}</p>
+                        </div>
+
+                        <table className="w-full text-xs mb-4">
+                            <thead>
+                                <tr className="border-b border-black">
+                                    <th className="text-left py-1">Item</th>
+                                    <th className="text-right py-1">Qty</th>
+                                    <th className="text-right py-1">Price</th>
+                                    <th className="text-right py-1">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {/* Consultation */}
+                                <tr>
+                                    <td className="py-1">Consultation</td>
+                                    <td className="text-right">1</td>
+                                    <td className="text-right">{selectedInvoiceVisit.consultationFee}</td>
+                                    <td className="text-right">{selectedInvoiceVisit.consultationFee.toFixed(2)}</td>
+                                </tr>
+                                {/* Labs */}
+                                {selectedInvoiceVisit.labOrders.map((lab, i) => (
+                                    <tr key={`lab-${i}`}>
+                                        <td className="py-1">{lab.testName}</td>
+                                        <td className="text-right">1</td>
+                                        <td className="text-right">{lab.price}</td>
+                                        <td className="text-right">{lab.price.toFixed(2)}</td>
+                                    </tr>
+                                ))}
+                                {/* Meds */}
+                                {selectedInvoiceVisit.prescription.map((med, i) => (
+                                    <tr key={`med-${i}`}>
+                                        <td className="py-1">{med.name}</td>
+                                        <td className="text-right">{med.quantity}</td>
+                                        <td className="text-right">{med.price}</td>
+                                        <td className="text-right">{(med.price * med.quantity).toFixed(2)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+
+                        <div className="border-t-2 border-dashed border-slate-300 pt-2 space-y-1">
+                            <div className="flex justify-between">
+                                <span>TOTAL AMOUNT:</span>
+                                <span className="font-bold">KSh {selectedInvoiceVisit.totalBill.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between text-xs text-slate-500">
+                                <span>Cash / M-Pesa:</span>
+                                <span>{selectedInvoiceVisit.totalBill.toFixed(2)}</span>
+                            </div>
+                        </div>
+
+                        <div className="mt-4 pt-2 border-t border-slate-200">
+                            <div className="flex justify-between text-xs">
+                                <span>Taxable Amount (Net):</span>
+                                <span>{((selectedInvoiceVisit.totalBill / 1.16)).toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                                <span>VAT (16%):</span>
+                                <span>{((selectedInvoiceVisit.totalBill / 1.16) * 0.16).toFixed(2)}</span>
+                            </div>
+                        </div>
+
+                        <div className="mt-6 text-center">
+                            <div className="w-24 h-24 bg-slate-900 mx-auto mb-2 flex items-center justify-center text-white">
+                                <QrCode className="w-16 h-16" />
+                            </div>
+                            <p className="text-[10px] uppercase">Scannable by KRA iTax</p>
+                            <p className="text-xs font-bold mt-2">*** END OF FISCAL RECEIPT ***</p>
+                        </div>
+                    </div>
+
+                    {/* Footer Actions */}
+                    <div className="p-4 bg-slate-100 flex gap-2">
+                        <button 
+                            onClick={() => setIsInvoiceModalOpen(false)} 
+                            className="flex-1 py-2 bg-white border border-slate-300 text-slate-700 font-bold uppercase text-xs rounded hover:bg-slate-50"
+                        >
+                            Close
+                        </button>
+                        <button 
+                            onClick={() => window.print()}
+                            className="flex-1 py-2 bg-slate-900 text-white font-bold uppercase text-xs rounded hover:bg-slate-800 flex items-center justify-center gap-2"
+                        >
+                            <Printer className="w-4 h-4" /> Print
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
         {/* Add/Edit Item Modal */}
         {isItemModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">

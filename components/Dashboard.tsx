@@ -10,9 +10,10 @@ interface DashboardProps {
   inventory: InventoryItem[];
   patients: Patient[];
   setView: (view: ViewState) => void;
+  onLogout?: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory, setView }) => {
+const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory, setView, onLogout }) => {
   const [briefing, setBriefing] = useState<string | null>(null);
   const [loadingBriefing, setLoadingBriefing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -105,10 +106,6 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory
     const text = await generateDailyBriefing(appointments.length, lowStock, 'KSh 45k');
     setBriefing(text);
     setLoadingBriefing(false);
-  };
-
-  const handleLogout = () => {
-      window.location.reload();
   };
 
   const markAllRead = (e: React.MouseEvent) => {
@@ -288,7 +285,7 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory
                              </button>
                              <div className="h-px bg-slate-100 dark:bg-slate-700 my-1"></div>
                              <button 
-                                onClick={handleLogout}
+                                onClick={() => { if (onLogout) onLogout(); }}
                                 className="w-full text-left px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex items-center gap-2 transition-colors"
                             >
                                  <LogOut className="w-4 h-4" /> Sign Out

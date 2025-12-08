@@ -1,13 +1,14 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Clinic, ApprovalRequest, TeamMember, SaaSTransaction, SaaSPlatformSettings, SystemLog } from '../types';
-import { MOCK_CLINICS, MOCK_REQUESTS, MOCK_SAAS_TRANSACTIONS, MOCK_SYSTEM_LOGS } from '../constants';
+import { Clinic, ApprovalRequest, TeamMember, SaaSTransaction, SaaSPlatformSettings, SystemLog, SupportTicket } from '../types';
+import { MOCK_CLINICS, MOCK_REQUESTS, MOCK_SAAS_TRANSACTIONS, MOCK_SYSTEM_LOGS, MOCK_TICKETS } from '../constants';
 import { 
   Shield, Activity, DollarSign, Building2, CheckCircle, XCircle, MoreHorizontal, 
   Search, Filter, Smartphone, CreditCard, ChevronDown, Download, AlertTriangle, 
   Settings, ToggleLeft, ToggleRight, Trash2, Eye, Mail, Server, ArrowUpRight, Save,
   FileText, UserCheck, Ban, Check, X, KeyRound, Loader2, PieChart as PieIcon,
-  Plus, MessageSquare, RefreshCw, Database, Undo2, Play, Calendar, Landmark, Receipt
+  Plus, MessageSquare, RefreshCw, Database, Undo2, Play, Calendar, Landmark, Receipt,
+  LifeBuoy, ChevronLeft, ChevronRight, HardDrive, Printer, Copy, Send, User
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 
@@ -15,7 +16,7 @@ interface SuperAdminDashboardProps {
     currentUser: TeamMember;
     switchUser: (member: TeamMember) => void;
     team: TeamMember[];
-    activeTab: 'overview' | 'clinics' | 'approvals' | 'payments' | 'settings';
+    activeTab: 'overview' | 'clinics' | 'approvals' | 'payments' | 'settings' | 'support';
 }
 
 const COLORS = {
@@ -27,6 +28,38 @@ const COLORS = {
   dark: '#1e293b'
 };
 
+// -- Reusable Pagination Component --
+const Pagination: React.FC<{
+    currentPage: number;
+    totalPages: number;
+    onPageChange: (page: number) => void;
+}> = ({ currentPage, totalPages, onPageChange }) => {
+    if (totalPages <= 1) return null;
+    return (
+        <div className="flex justify-between items-center px-6 py-4 border-t border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <span className="text-sm text-slate-500 dark:text-slate-400">
+                Page {currentPage} of {totalPages}
+            </span>
+            <div className="flex gap-2">
+                <button 
+                    onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+                    disabled={currentPage === 1}
+                    className="p-2 border border-slate-200 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 text-slate-600 dark:text-slate-300"
+                >
+                    <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button 
+                    onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+                    disabled={currentPage === totalPages}
+                    className="p-2 border border-slate-200 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 text-slate-600 dark:text-slate-300"
+                >
+                    <ChevronRight className="w-4 h-4" />
+                </button>
+            </div>
+        </div>
+    );
+};
+
 const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ currentUser, switchUser, team, activeTab }) => {
   
   // -- Data State --
@@ -34,12 +67,17 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ currentUser, 
   const [requests, setRequests] = useState<ApprovalRequest[]>(MOCK_REQUESTS);
   const [transactions, setTransactions] = useState<SaaSTransaction[]>(MOCK_SAAS_TRANSACTIONS);
   const [systemLogs, setSystemLogs] = useState<SystemLog[]>(MOCK_SYSTEM_LOGS);
+  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>(MOCK_TICKETS);
   const [platformSettings, setPlatformSettings] = useState<SaaSPlatformSettings>({
       maintenanceMode: false,
       allowNewRegistrations: true,
       globalAnnouncement: '',
       pricing: { free: 0, pro: 5000, enterprise: 15000 }
   });
+
+  // -- Pagination State --
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
 
   // -- UI State --
   const [isProcessing, setIsProcessing] = useState<string | null>(null); // Stores ID of processing item or 'global'
@@ -53,10 +91,25 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ currentUser, 
   const [showRecordPayment, setShowRecordPayment] = useState(false);
   const [selectedClinic, setSelectedClinic] = useState<Clinic | null>(null);
   const [actionMenuOpenId, setActionMenuOpenId] = useState<string | null>(null);
+  
+  // New Modals
+  const [showInvoice, setShowInvoice] = useState(false);
+  const [currentInvoiceData, setCurrentInvoiceData] = useState<any>(null);
+  
+  const [showBackupProgress, setShowBackupProgress] = useState(false);
+  const [backupType, setBackupType] = useState<'create' | 'restore'>('create');
+  const [backupProgress, setBackupProgress] = useState(0);
+
+  // Ticket Modal
+  const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
+  const [ticketReply, setTicketReply] = useState('');
+  const [supportSearch, setSupportSearch] = useState('');
+  const [supportStatusFilter, setSupportStatusFilter] = useState<'All' | 'Open' | 'Resolved' | 'In Progress'>('All');
 
   // -- Forms --
   const [newClinicForm, setNewClinicForm] = useState({ name: '', owner: '', email: '', plan: 'Free' });
   const [broadcastMsg, setBroadcastMsg] = useState('');
+  const [logFilter, setLogFilter] = useState({ type: 'All', search: '' });
   
   // Payment Recording Form
   const [recordPaymentForm, setRecordPaymentForm] = useState({ 
@@ -83,13 +136,18 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ currentUser, 
 
   const [approvalFilter, setApprovalFilter] = useState<'All' | 'Pending' | 'Approved' | 'Rejected'>('All');
 
-  // -- Toast Timer --
+  // -- Effects --
   useEffect(() => {
       if (toast) {
           const timer = setTimeout(() => setToast(null), 3000);
           return () => clearTimeout(timer);
       }
   }, [toast]);
+
+  // Reset pagination on tab switch
+  useEffect(() => {
+      setCurrentPage(1);
+  }, [activeTab, settingsSubTab, paymentsSubTab, supportStatusFilter]);
 
   const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
       setToast({ message, type });
@@ -102,6 +160,11 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ currentUser, 
       setIsProcessing(null);
   };
 
+  const copyToClipboard = (text: string) => {
+      navigator.clipboard.writeText(text);
+      showNotification('Copied to clipboard', 'info');
+  };
+
   // -- Derived Stats --
   const stats = useMemo(() => ({
       totalClinics: clinics.length,
@@ -109,7 +172,8 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ currentUser, 
       pendingRequests: requests.filter(r => r.status === 'Pending').length,
       monthlyRevenue: transactions.filter(t => t.status === 'Success').reduce((acc, t) => acc + t.amount, 0),
       failedPayments: transactions.filter(t => t.status === 'Failed').length,
-  }), [clinics, requests, transactions]);
+      openTickets: supportTickets.filter(t => t.status !== 'Resolved').length
+  }), [clinics, requests, transactions, supportTickets]);
 
   const planDistribution = useMemo(() => [
       { name: 'Free', value: clinics.filter(c => c.plan === 'Free').length, color: COLORS.neutral },
@@ -146,6 +210,45 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ currentUser, 
 
   // -- Handlers --
 
+  const handleBackupOperation = (type: 'create' | 'restore') => {
+      if (type === 'restore' && !confirm("CRITICAL WARNING: This will overwrite live data with the selected snapshot. Are you absolutely sure?")) return;
+      
+      setBackupType(type);
+      setShowBackupProgress(true);
+      setBackupProgress(0);
+
+      // Simulate Progress
+      let progress = 0;
+      const interval = setInterval(() => {
+          progress += Math.floor(Math.random() * 10) + 5;
+          if (progress >= 100) {
+              progress = 100;
+              clearInterval(interval);
+              setTimeout(() => {
+                  setShowBackupProgress(false);
+                  showNotification(type === 'create' ? 'System snapshot created successfully.' : 'System restored from backup.', 'success');
+              }, 500);
+          }
+          setBackupProgress(progress);
+      }, 200);
+  };
+
+  const handleGenerateInvoice = (transaction: SaaSTransaction | null, clinic?: Clinic) => {
+      // If transaction exists, show receipt. If clinic passed, generate new invoice preview.
+      const data = transaction || {
+          id: `INV-${Date.now()}`,
+          clinicName: clinic?.name || 'Unknown Clinic',
+          amount: clinic ? platformSettings.pricing[clinic.plan.toLowerCase() as keyof typeof platformSettings.pricing] : 0,
+          date: new Date().toISOString().split('T')[0],
+          status: 'Unpaid',
+          method: 'Pending',
+          plan: clinic?.plan || 'Pro'
+      };
+      setCurrentInvoiceData(data);
+      setShowInvoice(true);
+  };
+
+  // ... (Existing handlers: handleRecordPayment, handleSaveGateways, etc. preserved) ...
   const handleRecordPayment = () => {
       if (!recordPaymentForm.clinicId || !recordPaymentForm.amount) return;
       
@@ -319,6 +422,34 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ currentUser, 
       });
   };
 
+  const handleResolveTicket = (id: string) => {
+      simulateAsyncAction(id, () => {
+          setSupportTickets(prev => prev.map(t => t.id === id ? {...t, status: 'Resolved'} : t));
+          if (selectedTicket && selectedTicket.id === id) {
+              setSelectedTicket(prev => prev ? {...prev, status: 'Resolved'} : null);
+          }
+          showNotification('Ticket marked as resolved', 'success');
+      });
+  };
+
+  const handleSendReply = () => {
+      if (!selectedTicket || !ticketReply.trim()) return;
+      
+      simulateAsyncAction('reply', () => {
+          // In a real app, this would append to a message list
+          const updatedTicket = {
+              ...selectedTicket, 
+              lastUpdate: 'Just now',
+              status: selectedTicket.status === 'Resolved' ? 'In Progress' : selectedTicket.status
+          };
+          
+          setSupportTickets(prev => prev.map(t => t.id === selectedTicket.id ? updatedTicket : t));
+          setSelectedTicket(updatedTicket);
+          setTicketReply('');
+          showNotification('Reply sent successfully', 'success');
+      });
+  };
+
   // -- Render Methods --
 
   const renderOverview = () => (
@@ -429,839 +560,637 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ currentUser, 
       </div>
   );
 
+  const renderSupport = () => {
+      const statusColors = { 'Open': 'bg-red-100 text-red-700 border-red-200', 'In Progress': 'bg-orange-100 text-orange-700 border-orange-200', 'Resolved': 'bg-green-100 text-green-700 border-green-200' };
+      const priorityColors = { 'Low': 'text-slate-500 bg-slate-100', 'Medium': 'text-blue-600 bg-blue-50', 'High': 'text-orange-600 bg-orange-50', 'Critical': 'text-red-600 bg-red-50' };
+
+      const filteredTickets = supportTickets.filter(t => {
+          const matchSearch = t.clinicName.toLowerCase().includes(supportSearch.toLowerCase()) || t.subject.toLowerCase().includes(supportSearch.toLowerCase());
+          const matchStatus = supportStatusFilter === 'All' || t.status === supportStatusFilter;
+          return matchSearch && matchStatus;
+      });
+
+      return (
+          <div className="space-y-6 animate-in fade-in">
+              <div className="flex gap-4">
+                  <div className="flex-1 bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                      <div>
+                          <p className="text-slate-500 text-xs font-bold uppercase">Open Tickets</p>
+                          <h3 className="text-3xl font-bold text-slate-900 dark:text-white mt-1">{stats.openTickets}</h3>
+                      </div>
+                      <LifeBuoy className="w-8 h-8 text-indigo-500 opacity-50"/>
+                  </div>
+                  <div className="flex-1 bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                      <div>
+                          <p className="text-slate-500 text-xs font-bold uppercase">Critical Issues</p>
+                          <h3 className="text-3xl font-bold text-red-600 mt-1">{supportTickets.filter(t => t.priority === 'Critical').length}</h3>
+                      </div>
+                      <AlertTriangle className="w-8 h-8 text-red-500 opacity-50"/>
+                  </div>
+              </div>
+
+              {/* Toolbar */}
+              <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row justify-between items-center gap-4">
+                  <div className="flex gap-4 w-full sm:w-auto">
+                      <div className="relative flex-1 sm:w-64">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                          <input 
+                              placeholder="Search tickets..." 
+                              value={supportSearch}
+                              onChange={(e) => setSupportSearch(e.target.value)}
+                              className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-700 rounded-xl text-sm outline-none dark:text-white border border-slate-200 dark:border-slate-600" 
+                          />
+                      </div>
+                      <div className="relative">
+                          <select 
+                              value={supportStatusFilter}
+                              onChange={(e) => setSupportStatusFilter(e.target.value as any)}
+                              className="appearance-none bg-slate-50 dark:bg-slate-700 px-4 py-2.5 pr-8 rounded-xl text-sm font-medium outline-none dark:text-white border border-slate-200 dark:border-slate-600 cursor-pointer h-full"
+                          >
+                              <option value="All">All Status</option>
+                              <option value="Open">Open</option>
+                              <option value="In Progress">In Progress</option>
+                              <option value="Resolved">Resolved</option>
+                          </select>
+                          <Filter className="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+                      </div>
+                  </div>
+              </div>
+
+              <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden min-h-[400px]">
+                  <table className="w-full text-left text-sm">
+                      <thead className="bg-slate-50 dark:bg-slate-700/50 text-xs uppercase text-slate-400 font-semibold border-b border-slate-100 dark:border-slate-700">
+                          <tr>
+                              <th className="px-6 py-4">ID</th>
+                              <th className="px-6 py-4">Clinic</th>
+                              <th className="px-6 py-4">Subject</th>
+                              <th className="px-6 py-4">Priority</th>
+                              <th className="px-6 py-4">Status</th>
+                              <th className="px-6 py-4">Last Update</th>
+                              <th className="px-6 py-4 text-right">Action</th>
+                          </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50 dark:divide-slate-700">
+                          {filteredTickets.map(ticket => (
+                              <tr key={ticket.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                                  <td className="px-6 py-4 font-mono text-xs text-slate-500">{ticket.id}</td>
+                                  <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">{ticket.clinicName}</td>
+                                  <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{ticket.subject}</td>
+                                  <td className="px-6 py-4">
+                                      <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${priorityColors[ticket.priority]}`}>
+                                          {ticket.priority}
+                                      </span>
+                                  </td>
+                                  <td className="px-6 py-4">
+                                      <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase border ${statusColors[ticket.status]}`}>
+                                          {ticket.status}
+                                      </span>
+                                  </td>
+                                  <td className="px-6 py-4 text-slate-500 text-xs">{ticket.lastUpdate}</td>
+                                  <td className="px-6 py-4 text-right">
+                                      <div className="flex justify-end gap-2">
+                                          <button 
+                                            onClick={() => setSelectedTicket(ticket)}
+                                            className="px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
+                                          >
+                                              <Eye className="w-3 h-3" /> View
+                                          </button>
+                                      </div>
+                                  </td>
+                              </tr>
+                          ))}
+                      </tbody>
+                  </table>
+                  {filteredTickets.length === 0 && (
+                      <div className="p-12 text-center text-slate-400">
+                          <LifeBuoy className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                          <p>No matching tickets found.</p>
+                      </div>
+                  )}
+              </div>
+          </div>
+      );
+  }
+
+  const renderClinics = () => {
+      const filteredClinics = clinics.filter(c => {
+          const matchSearch = c.name.toLowerCase().includes(clinicSearch.toLowerCase()) || c.ownerName.toLowerCase().includes(clinicSearch.toLowerCase());
+          const matchStatus = clinicStatusFilter === 'All' || c.status === clinicStatusFilter;
+          const matchPlan = clinicPlanFilter === 'All' || c.plan === clinicPlanFilter;
+          return matchSearch && matchStatus && matchPlan;
+      });
+
+      return (
+          <div className="space-y-6 animate-in fade-in">
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+                  <div className="flex items-center gap-3 w-full sm:w-auto">
+                      <div className="relative flex-1 sm:w-64">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                          <input 
+                              placeholder="Search clinics..." 
+                              value={clinicSearch}
+                              onChange={(e) => setClinicSearch(e.target.value)}
+                              className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-700 rounded-xl text-sm outline-none dark:text-white border border-slate-200 dark:border-slate-600" 
+                          />
+                      </div>
+                      <div className="flex gap-2">
+                          <select value={clinicStatusFilter} onChange={(e) => setClinicStatusFilter(e.target.value as any)} className="bg-slate-50 dark:bg-slate-700 px-3 py-2.5 rounded-xl text-sm outline-none dark:text-white border border-slate-200 dark:border-slate-600 cursor-pointer">
+                              <option value="All">All Status</option>
+                              <option value="Active">Active</option>
+                              <option value="Suspended">Suspended</option>
+                          </select>
+                      </div>
+                  </div>
+                  <button onClick={() => setShowAddClinic(true)} className="bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-lg shadow-indigo-200 dark:shadow-none w-full sm:w-auto justify-center">
+                      <Plus className="w-4 h-4" /> Add Clinic
+                  </button>
+              </div>
+
+              <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+                  <table className="w-full text-left text-sm">
+                      <thead className="bg-slate-50 dark:bg-slate-700/50 text-xs uppercase text-slate-400 font-semibold border-b border-slate-100 dark:border-slate-700">
+                          <tr>
+                              <th className="px-6 py-4">Clinic Name</th>
+                              <th className="px-6 py-4">Owner</th>
+                              <th className="px-6 py-4">Plan</th>
+                              <th className="px-6 py-4">Status</th>
+                              <th className="px-6 py-4">Revenue YTD</th>
+                              <th className="px-6 py-4 text-right">Actions</th>
+                          </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50 dark:divide-slate-700">
+                          {filteredClinics.map(clinic => (
+                              <tr key={clinic.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                                  <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">{clinic.name}</td>
+                                  <td className="px-6 py-4 text-slate-600 dark:text-slate-300">
+                                      <div className="flex flex-col">
+                                          <span>{clinic.ownerName}</span>
+                                          <span className="text-xs text-slate-400">{clinic.email}</span>
+                                      </div>
+                                  </td>
+                                  <td className="px-6 py-4">
+                                      <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
+                                          clinic.plan === 'Enterprise' ? 'bg-purple-100 text-purple-700' : 
+                                          clinic.plan === 'Pro' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'
+                                      }`}>{clinic.plan}</span>
+                                  </td>
+                                  <td className="px-6 py-4">
+                                      <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
+                                          clinic.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                                      }`}>{clinic.status}</span>
+                                  </td>
+                                  <td className="px-6 py-4 font-mono text-slate-700 dark:text-slate-300">KSh {clinic.revenueYTD.toLocaleString()}</td>
+                                  <td className="px-6 py-4 text-right">
+                                      <div className="flex justify-end gap-2">
+                                          <button onClick={() => handleImpersonate(clinic)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg" title="Login as Admin">
+                                              <KeyRound className="w-4 h-4" />
+                                          </button>
+                                          <button onClick={() => handleSuspendClinic(clinic.id)} className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg" title={clinic.status === 'Active' ? 'Suspend' : 'Activate'}>
+                                              <Ban className="w-4 h-4" />
+                                          </button>
+                                          <button onClick={() => handleDeleteClinic(clinic.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Delete">
+                                              <Trash2 className="w-4 h-4" />
+                                          </button>
+                                      </div>
+                                  </td>
+                              </tr>
+                          ))}
+                      </tbody>
+                  </table>
+              </div>
+          </div>
+      );
+  };
+
   const renderApprovals = () => {
       const filteredRequests = requests.filter(r => approvalFilter === 'All' || r.status === approvalFilter);
 
       return (
           <div className="space-y-6 animate-in fade-in">
-              {/* Stats & Filters */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  {['All', 'Pending', 'Approved', 'Rejected'].map(status => (
-                      <button 
-                          key={status}
-                          onClick={() => setApprovalFilter(status as any)}
-                          className={`p-4 rounded-xl border transition-all text-left ${
-                              approvalFilter === status 
-                              ? 'bg-indigo-50 border-indigo-200 dark:bg-indigo-900/20 dark:border-indigo-800' 
-                              : 'bg-white border-slate-100 dark:bg-slate-800 dark:border-slate-700 hover:border-indigo-200'
-                          }`}
-                      >
-                          <div className={`text-xs font-bold uppercase mb-1 ${
-                              status === 'All' ? 'text-slate-500' : 
-                              status === 'Pending' ? 'text-orange-500' :
-                              status === 'Approved' ? 'text-green-500' : 'text-red-500'
-                          }`}>{status} Requests</div>
-                          <div className="text-2xl font-bold text-slate-900 dark:text-white">
-                              {status === 'All' ? requests.length : requests.filter(r => r.status === status).length}
-                          </div>
-                      </button>
-                  ))}
+              <div className="flex items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+                  <span className="text-sm font-bold text-slate-500">Filter Status:</span>
+                  <div className="flex gap-2">
+                      {['All', 'Pending', 'Approved', 'Rejected'].map(status => (
+                          <button
+                              key={status}
+                              onClick={() => setApprovalFilter(status as any)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                  approvalFilter === status 
+                                  ? 'bg-indigo-600 text-white' 
+                                  : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                              }`}
+                          >
+                              {status}
+                          </button>
+                      ))}
+                  </div>
               </div>
 
-              {/* Table */}
-              <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden min-h-[400px]">
-                  <table className="w-full text-left text-sm">
-                      <thead className="bg-slate-50 dark:bg-slate-700/50 text-xs uppercase text-slate-400 font-semibold border-b border-slate-100 dark:border-slate-700">
-                          <tr>
-                              <th className="px-6 py-4">Request Type</th>
-                              <th className="px-6 py-4">Clinic & Requester</th>
-                              <th className="px-6 py-4">Date</th>
-                              <th className="px-6 py-4">Details</th>
-                              <th className="px-6 py-4">Status</th>
-                              <th className="px-6 py-4 text-right">Actions</th>
-                          </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-50 dark:divide-slate-700">
-                          {filteredRequests.map(req => (
-                              <tr key={req.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                                  <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">{req.type}</td>
-                                  <td className="px-6 py-4">
-                                      <div className="font-medium text-slate-900 dark:text-white">{req.clinicName}</div>
-                                      <div className="text-xs text-slate-500">{req.requesterName}</div>
-                                  </td>
-                                  <td className="px-6 py-4 text-slate-500">{req.date}</td>
-                                  <td className="px-6 py-4 text-slate-600 dark:text-slate-300 max-w-xs truncate" title={req.details}>{req.details}</td>
-                                  <td className="px-6 py-4">
-                                      <span className={`px-2 py-1 rounded text-xs font-bold ${
-                                          req.status === 'Pending' ? 'bg-orange-100 text-orange-700' :
-                                          req.status === 'Approved' ? 'bg-green-100 text-green-700' :
-                                          'bg-red-100 text-red-700'
-                                      }`}>
-                                          {req.status}
-                                      </span>
-                                  </td>
-                                  <td className="px-6 py-4 text-right">
-                                      {req.status === 'Pending' && (
-                                          <div className="flex justify-end gap-2">
-                                              <button onClick={() => handleApproveRequest(req.id)} disabled={isProcessing === req.id} className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors disabled:opacity-50" title="Approve">
-                                                  {isProcessing === req.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <Check className="w-4 h-4" />}
-                                              </button>
-                                              <button onClick={() => handleRejectRequest(req.id)} disabled={isProcessing === req.id} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50" title="Reject">
-                                                  {isProcessing === req.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <X className="w-4 h-4" />}
-                                              </button>
-                                          </div>
-                                      )}
-                                  </td>
-                              </tr>
-                          ))}
-                      </tbody>
-                  </table>
-                  {filteredRequests.length === 0 && <div className="p-8 text-center text-slate-400">No requests found.</div>}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredRequests.map(req => (
+                      <div key={req.id} className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 relative overflow-hidden group">
+                          <div className={`absolute top-0 left-0 w-1.5 h-full ${
+                              req.status === 'Pending' ? 'bg-orange-500' : req.status === 'Approved' ? 'bg-green-500' : 'bg-red-500'
+                          }`}></div>
+                          <div className="flex justify-between items-start mb-4 pl-2">
+                              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">{req.type}</span>
+                              <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
+                                  req.status === 'Pending' ? 'bg-orange-100 text-orange-700' : 
+                                  req.status === 'Approved' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                              }`}>{req.status}</span>
+                          </div>
+                          <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 pl-2">{req.clinicName}</h3>
+                          <p className="text-sm text-slate-500 pl-2 mb-4">Requester: {req.requesterName}</p>
+                          <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-xl mb-4 ml-2">
+                              <p className="text-xs text-slate-600 dark:text-slate-300 italic">"{req.details}"</p>
+                          </div>
+                          <div className="flex gap-2 pl-2">
+                              {req.status === 'Pending' && (
+                                  <>
+                                      <button 
+                                          onClick={() => handleApproveRequest(req.id)}
+                                          disabled={isProcessing === req.id}
+                                          className="flex-1 py-2 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 flex items-center justify-center gap-1 disabled:opacity-50"
+                                      >
+                                          {isProcessing === req.id ? <Loader2 className="w-3 h-3 animate-spin"/> : <Check className="w-3 h-3"/>} Approve
+                                      </button>
+                                      <button 
+                                          onClick={() => handleRejectRequest(req.id)}
+                                          disabled={isProcessing === req.id}
+                                          className="flex-1 py-2 bg-white border border-red-200 text-red-600 rounded-lg text-xs font-bold hover:bg-red-50 flex items-center justify-center gap-1 disabled:opacity-50"
+                                      >
+                                          <X className="w-3 h-3"/> Reject
+                                      </button>
+                                  </>
+                              )}
+                              {req.status !== 'Pending' && (
+                                  <button className="flex-1 py-2 bg-slate-100 dark:bg-slate-700 text-slate-500 rounded-lg text-xs font-bold cursor-default">
+                                      Processed
+                                  </button>
+                              )}
+                          </div>
+                      </div>
+                  ))}
+                  {filteredRequests.length === 0 && <div className="col-span-full text-center py-12 text-slate-400">No requests found.</div>}
               </div>
           </div>
       );
   };
 
-  const renderClinics = () => {
-    const filteredClinics = clinics.filter(c => {
-        const matchesSearch = c.name.toLowerCase().includes(clinicSearch.toLowerCase()) || c.email.toLowerCase().includes(clinicSearch.toLowerCase());
-        const matchesStatus = clinicStatusFilter === 'All' || c.status === clinicStatusFilter;
-        const matchesPlan = clinicPlanFilter === 'All' || c.plan === clinicPlanFilter;
-        return matchesSearch && matchesStatus && matchesPlan;
-    });
-
-    return (
-      <div className="space-y-6 animate-in fade-in">
-          {/* Controls */}
-          <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col md:flex-row gap-4 justify-between items-center">
-             <div className="flex gap-4 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
-                  <div className="relative min-w-[240px]">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input 
-                        placeholder="Search clinics by name or email..." 
-                        className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-700 rounded-xl text-sm outline-none dark:text-white"
-                        value={clinicSearch}
-                        onChange={(e) => setClinicSearch(e.target.value)}
-                      />
-                  </div>
-                  <div className="relative">
-                       <select 
-                           value={clinicPlanFilter}
-                           onChange={(e) => setClinicPlanFilter(e.target.value as any)}
-                           className="appearance-none bg-slate-50 dark:bg-slate-700 px-4 py-2.5 pr-8 rounded-xl text-sm font-medium outline-none dark:text-white cursor-pointer"
-                       >
-                           <option value="All">All Plans</option>
-                           <option value="Free">Free</option>
-                           <option value="Pro">Pro</option>
-                           <option value="Enterprise">Enterprise</option>
-                       </select>
-                       <Filter className="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
-                  </div>
-                   <div className="relative">
-                       <select 
-                           value={clinicStatusFilter}
-                           onChange={(e) => setClinicStatusFilter(e.target.value as any)}
-                           className="appearance-none bg-slate-50 dark:bg-slate-700 px-4 py-2.5 pr-8 rounded-xl text-sm font-medium outline-none dark:text-white cursor-pointer"
-                       >
-                           <option value="All">All Status</option>
-                           <option value="Active">Active</option>
-                           <option value="Suspended">Suspended</option>
-                       </select>
-                       <Filter className="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
-                  </div>
-             </div>
-             <div className="flex gap-3">
-                 <button 
-                    onClick={() => exportToCSV(filteredClinics, 'clinics_export')}
-                    className="hidden sm:flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-white transition-colors border border-slate-200 dark:border-slate-700 px-4 py-2.5 rounded-xl"
-                >
-                     <Download className="w-4 h-4" /> Export
-                 </button>
-                 <button 
-                    onClick={() => setShowAddClinic(true)}
-                    className="flex items-center gap-2 text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 transition-colors px-4 py-2.5 rounded-xl shadow-lg shadow-indigo-200 dark:shadow-none"
-                >
-                     <Plus className="w-4 h-4" /> Add Clinic
-                 </button>
-             </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-              <div className="lg:col-span-3 bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-visible min-h-[400px]">
-                  <table className="w-full text-left text-sm">
-                      <thead className="bg-slate-50 dark:bg-slate-700/50 text-xs uppercase text-slate-400 font-semibold border-b border-slate-100 dark:border-slate-700">
-                          <tr>
-                              <th className="px-6 py-4">Clinic Name</th>
-                              <th className="px-6 py-4">Plan</th>
-                              <th className="px-6 py-4">Status</th>
-                              <th className="px-6 py-4">Revenue YTD</th>
-                              <th className="px-6 py-4">Joined</th>
-                              <th className="px-6 py-4 text-right">Action</th>
-                          </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-50 dark:divide-slate-700">
-                          {filteredClinics.map(clinic => (
-                              <tr key={clinic.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group">
-                                  <td className="px-6 py-4">
-                                      <div className="font-bold text-slate-900 dark:text-white">{clinic.name}</div>
-                                      <div className="text-xs text-slate-500">{clinic.email}</div>
-                                  </td>
-                                  <td className="px-6 py-4">
-                                      <span className={`px-2 py-1 rounded-lg text-xs font-bold ${
-                                          clinic.plan === 'Enterprise' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/20 dark:text-purple-300' :
-                                          clinic.plan === 'Pro' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-300' :
-                                          'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
-                                      }`}>
-                                          {clinic.plan}
-                                      </span>
-                                  </td>
-                                  <td className="px-6 py-4">
-                                      <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-bold ${
-                                          clinic.status === 'Active' ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-300' : 
-                                          clinic.status === 'Suspended' ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300' : 'bg-amber-100 text-amber-700'
-                                      }`}>
-                                          <span className={`w-1.5 h-1.5 rounded-full ${clinic.status === 'Active' ? 'bg-green-600' : 'bg-red-600'}`}></span>
-                                          {clinic.status}
-                                      </span>
-                                  </td>
-                                  <td className="px-6 py-4 font-mono font-medium">KSh {clinic.revenueYTD.toLocaleString()}</td>
-                                  <td className="px-6 py-4 text-slate-500">{clinic.joinedDate}</td>
-                                  <td className="px-6 py-4 text-right relative">
-                                      <button onClick={() => setActionMenuOpenId(actionMenuOpenId === clinic.id ? null : clinic.id)} className="p-2 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
-                                          <MoreHorizontal className="w-5 h-5"/>
-                                      </button>
-                                      
-                                      {/* Dropdown Menu */}
-                                      {actionMenuOpenId === clinic.id && (
-                                          <div className="absolute right-8 top-10 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-100 dark:border-slate-700 z-20 animate-in zoom-in-95 origin-top-right">
-                                              <div className="p-1">
-                                                  <button onClick={() => { setSelectedClinic(clinic); setActionMenuOpenId(null); }} className="w-full text-left px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg flex items-center gap-2">
-                                                      <Eye className="w-4 h-4" /> View Details
-                                                  </button>
-                                                  <button onClick={() => handleEmailOwner(clinic.email)} className="w-full text-left px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg flex items-center gap-2">
-                                                      <Mail className="w-4 h-4" /> Email Owner
-                                                  </button>
-                                                  <div className="h-px bg-slate-100 dark:bg-slate-700 my-1"></div>
-                                                  <button onClick={() => handleSuspendClinic(clinic.id)} className="w-full text-left px-3 py-2 text-sm text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-lg flex items-center gap-2 font-medium">
-                                                      <AlertTriangle className="w-4 h-4" /> {clinic.status === 'Active' ? 'Suspend' : 'Activate'}
-                                                  </button>
-                                                  <button onClick={() => handleDeleteClinic(clinic.id)} className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex items-center gap-2 font-medium">
-                                                      <Trash2 className="w-4 h-4" /> Delete Clinic
-                                                  </button>
-                                              </div>
-                                          </div>
-                                      )}
-                                  </td>
-                              </tr>
-                          ))}
-                      </tbody>
-                  </table>
-                  {filteredClinics.length === 0 && <div className="p-8 text-center text-slate-400">No clinics found matching filters.</div>}
-              </div>
-
-              {/* Plan Distribution Chart */}
-              <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 h-fit">
-                  <h4 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-                      <PieIcon className="w-4 h-4 text-slate-400"/> Subscription Plans
-                  </h4>
-                  <div className="h-48 relative">
-                      <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                              <Pie 
-                                  data={planDistribution}
-                                  innerRadius={40}
-                                  outerRadius={60}
-                                  paddingAngle={5}
-                                  dataKey="value"
-                              >
-                                  {planDistribution.map((entry, index) => (
-                                      <Cell key={`cell-${index}`} fill={entry.color} strokeWidth={0} />
-                                  ))}
-                              </Pie>
-                              <Tooltip contentStyle={{backgroundColor: '#1e293b', borderRadius: '8px', border: 'none', color: '#fff'}} />
-                          </PieChart>
-                      </ResponsiveContainer>
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                          <span className="font-bold text-slate-900 dark:text-white text-xl">{clinics.length}</span>
-                      </div>
-                  </div>
-                  <div className="space-y-2 mt-2">
-                      {planDistribution.map(p => (
-                          <div key={p.name} className="flex justify-between text-sm text-slate-600 dark:text-slate-300">
-                              <div className="flex items-center gap-2">
-                                  <span className="w-2 h-2 rounded-full" style={{backgroundColor: p.color}}></span>
-                                  {p.name}
-                              </div>
-                              <span className="font-bold">{p.value}</span>
-                          </div>
-                      ))}
-                  </div>
-              </div>
-          </div>
-
-          {/* Clinic Detail Slide-over / Modal */}
-          {selectedClinic && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-                  <div className="bg-white dark:bg-slate-800 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
-                      <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-start bg-slate-50 dark:bg-slate-700/50">
-                          <div>
-                              <h3 className="text-xl font-bold text-slate-900 dark:text-white">{selectedClinic.name}</h3>
-                              <p className="text-sm text-slate-500">Tenant ID: {selectedClinic.id}</p>
-                          </div>
-                          <button onClick={() => setSelectedClinic(null)} className="text-slate-400 hover:text-slate-600"><XCircle className="w-6 h-6"/></button>
-                      </div>
-                      
-                      <div className="p-6 space-y-6">
-                           <div className="grid grid-cols-2 gap-4">
-                               <div className="p-4 bg-slate-50 dark:bg-slate-700/30 rounded-xl">
-                                   <div className="text-xs font-bold text-slate-500 uppercase">Owner</div>
-                                   <div className="font-bold text-slate-900 dark:text-white">{selectedClinic.ownerName}</div>
-                                   <div className="text-sm text-slate-500">{selectedClinic.email}</div>
-                               </div>
-                               <div className="p-4 bg-slate-50 dark:bg-slate-700/30 rounded-xl">
-                                   <div className="text-xs font-bold text-slate-500 uppercase">Subscription</div>
-                                   <div className="font-bold text-indigo-600">{selectedClinic.plan}</div>
-                                   <div className="text-sm text-slate-500">Next Bill: {selectedClinic.nextPaymentDate}</div>
-                               </div>
-                           </div>
-
-                           <div>
-                               <h4 className="font-bold text-slate-900 dark:text-white mb-3 text-sm">Revenue History (YTD)</h4>
-                               <div className="h-48 bg-slate-50 dark:bg-slate-700/30 rounded-xl p-4 border border-slate-100 dark:border-slate-700">
-                                   <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart data={[
-                                            {name: 'Q1', val: selectedClinic.revenueYTD * 0.2},
-                                            {name: 'Q2', val: selectedClinic.revenueYTD * 0.3},
-                                            {name: 'Q3', val: selectedClinic.revenueYTD * 0.4},
-                                            {name: 'Q4', val: selectedClinic.revenueYTD * 0.1}, 
-                                        ]}>
-                                            <CartesianGrid vertical={false} stroke="#e2e8f0" strokeOpacity={0.5} strokeDasharray="3 3"/>
-                                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12}} />
-                                            <Tooltip cursor={{fill: 'transparent'}} contentStyle={{backgroundColor: '#1e293b', borderRadius: '8px', border: 'none', color: '#fff'}} />
-                                            <Bar dataKey="val" fill="#4f46e5" radius={[4, 4, 0, 0]} barSize={40} />
-                                        </BarChart>
-                                   </ResponsiveContainer>
-                               </div>
-                           </div>
-                           
-                           <div className="pt-4 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-3">
-                                <button 
-                                    onClick={() => handleResetPassword(selectedClinic.email)}
-                                    disabled={isProcessing === 'reset-pwd'}
-                                    className="px-4 py-2 border border-slate-200 dark:border-slate-600 rounded-xl text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 disabled:opacity-50"
-                                >
-                                    {isProcessing === 'reset-pwd' ? <Loader2 className="w-4 h-4 animate-spin"/> : <KeyRound className="w-4 h-4"/>} 
-                                    Reset Password
-                                </button>
-                                <button 
-                                    onClick={() => handleImpersonate(selectedClinic)}
-                                    disabled={isProcessing === 'impersonate'}
-                                    className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50"
-                                >
-                                    {isProcessing === 'impersonate' ? <Loader2 className="w-4 h-4 animate-spin"/> : <ArrowUpRight className="w-4 h-4" />} 
-                                    Login as Admin
-                                </button>
-                           </div>
-                      </div>
-                  </div>
-              </div>
-          )}
-      </div>
-    );
-  };
-
   const renderPayments = () => {
-      // -- Helper Renderers --
-      const renderTransactions = () => {
-          const filteredTransactions = transactions.filter(t => {
-              const matchesSearch = t.id.toLowerCase().includes(transactionSearch.toLowerCase()) || t.clinicName.toLowerCase().includes(transactionSearch.toLowerCase());
-              const matchesStatus = transactionStatusFilter === 'All' || t.status === transactionStatusFilter;
-              return matchesSearch && matchesStatus;
-          });
+      const filteredTransactions = transactions.filter(t => {
+          const matchSearch = t.clinicName.toLowerCase().includes(transactionSearch.toLowerCase()) || t.id.toLowerCase().includes(transactionSearch.toLowerCase());
+          const matchStatus = transactionStatusFilter === 'All' || t.status === transactionStatusFilter;
+          return matchSearch && matchStatus;
+      });
 
-          return (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in">
-                <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col overflow-hidden">
-                    <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex flex-col md:flex-row justify-between items-center gap-4">
-                        <h3 className="font-bold text-slate-900 dark:text-white">Recent Transactions</h3>
-                        <div className="flex gap-4 w-full md:w-auto">
-                            <div className="relative flex-1 md:w-48">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                <input 
-                                    placeholder="Search..." 
-                                    className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-700 rounded-xl text-sm outline-none dark:text-white"
-                                    value={transactionSearch}
-                                    onChange={(e) => setTransactionSearch(e.target.value)}
-                                />
-                            </div>
-                            <div className="relative">
-                                <select 
-                                    value={transactionStatusFilter}
-                                    onChange={(e) => setTransactionStatusFilter(e.target.value as any)}
-                                    className="appearance-none bg-slate-50 dark:bg-slate-700 px-4 py-2 pr-8 rounded-xl text-sm font-medium outline-none dark:text-white cursor-pointer h-full"
-                                >
-                                    <option value="All">All</option>
-                                    <option value="Success">Success</option>
-                                    <option value="Pending">Pending</option>
-                                    <option value="Failed">Failed</option>
-                                </select>
-                                <Filter className="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
-                            </div>
-                            <button 
-                                onClick={() => exportToCSV(filteredTransactions, 'transactions_export')}
-                                className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
-                                title="Export CSV"
-                            >
-                                <Download className="w-5 h-5" />
-                            </button>
-                        </div>
-                    </div>
+      return (
+          <div className="space-y-6 animate-in fade-in">
+              {/* Payments Sub-nav */}
+              <div className="flex bg-slate-100 dark:bg-slate-800/50 p-1 rounded-xl w-fit">
+                  {['transactions', 'gateways'].map(tab => (
+                      <button
+                          key={tab}
+                          onClick={() => setPaymentsSubTab(tab as any)}
+                          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all capitalize ${
+                              paymentsSubTab === tab ? 'bg-white dark:bg-slate-700 shadow text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'
+                          }`}
+                      >
+                          {tab}
+                      </button>
+                  ))}
+              </div>
 
-                    <div className="overflow-x-auto flex-1">
-                        <table className="w-full text-left text-sm">
-                            <thead className="bg-slate-50 dark:bg-slate-700/50 text-xs uppercase text-slate-400 font-semibold border-b border-slate-100 dark:border-slate-700">
-                                <tr>
-                                    <th className="px-6 py-4">ID / Date</th>
-                                    <th className="px-6 py-4">Clinic</th>
-                                    <th className="px-6 py-4">Amount</th>
-                                    <th className="px-6 py-4">Status</th>
-                                    <th className="px-6 py-4 text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-50 dark:divide-slate-700">
-                                {filteredTransactions.map(tx => (
-                                    <tr key={tx.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                                        <td className="px-6 py-4">
-                                            <div className="font-mono text-slate-500 text-xs">{tx.id}</div>
-                                            <div className="text-slate-900 dark:text-white text-xs">{tx.date}</div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="font-medium text-slate-900 dark:text-white text-sm">{tx.clinicName}</div>
-                                            <div className="text-xs text-slate-400">{tx.plan} Plan • {tx.method}</div>
-                                        </td>
-                                        <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200">KSh {tx.amount.toLocaleString()}</td>
-                                        <td className="px-6 py-4">
-                                            <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase border ${
-                                                tx.status === 'Success' ? 'bg-green-50 text-green-700 border-green-100 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900' : 
-                                                tx.status === 'Pending' ? 'bg-orange-50 text-orange-700 border-orange-100 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-900' : 
-                                                'bg-red-50 text-red-700 border-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-900'
-                                            }`}>
-                                                {tx.status}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="flex justify-end gap-2">
-                                                <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-400 hover:text-indigo-600" title="Download Invoice">
-                                                    <FileText className="w-4 h-4"/>
-                                                </button>
-                                                {tx.status === 'Success' && (
-                                                    <button onClick={() => handleRefund(tx.id)} disabled={isProcessing === tx.id} className="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded text-slate-400 hover:text-red-500" title="Process Refund">
-                                                        {isProcessing === tx.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <Undo2 className="w-4 h-4"/>}
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                        {filteredTransactions.length === 0 && <div className="p-8 text-center text-slate-400">No transactions found.</div>}
-                    </div>
-                </div>
-
-                <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 flex flex-col h-full">
-                    <div className="mb-6">
-                        <h4 className="font-bold text-slate-900 dark:text-white">Revenue Trend</h4>
-                        <p className="text-xs text-slate-500">6 Month Performance</p>
-                    </div>
-                    <div className="flex-1 min-h-[200px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={recentRevenue}>
-                                <CartesianGrid vertical={false} stroke="#e2e8f0" strokeOpacity={0.5} strokeDasharray="3 3"/>
-                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} />
-                                <Tooltip cursor={{fill: 'transparent'}} contentStyle={{backgroundColor: '#1e293b', borderRadius: '8px', border: 'none', color: '#fff', fontSize: '12px'}} />
-                                <Bar dataKey="amount" fill="#10b981" radius={[4, 4, 0, 0]} barSize={24} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                    <div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-700">
-                        <div className="flex justify-between items-center mb-2">
-                            <span className="text-xs text-slate-500">Projected (Next Month)</span>
-                            <span className="text-sm font-bold text-slate-900 dark:text-white">~ KSh 45k</span>
-                        </div>
-                        <div className="w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
-                            <div className="bg-indigo-500 w-[75%] h-full rounded-full"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-          );
-      };
-
-      const renderSubscriptions = () => {
-          return (
-              <div className="space-y-6 animate-in fade-in">
-                  <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
-                      <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
-                          <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                              <RefreshCw className="w-5 h-5 text-slate-400" /> Active Subscriptions
-                          </h3>
-                          <button 
-                            onClick={() => setShowRecordPayment(true)}
-                            className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-indigo-700 flex items-center gap-2 shadow-lg shadow-indigo-200 dark:shadow-none"
-                          >
-                              <Plus className="w-4 h-4"/> Record Payment
+              {paymentsSubTab === 'transactions' && (
+                  <>
+                      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+                          <div className="flex items-center gap-3 w-full sm:w-auto">
+                              <div className="relative flex-1 sm:w-64">
+                                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                  <input 
+                                      placeholder="Search transaction..." 
+                                      value={transactionSearch}
+                                      onChange={(e) => setTransactionSearch(e.target.value)}
+                                      className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-700 rounded-xl text-sm outline-none dark:text-white border border-slate-200 dark:border-slate-600" 
+                                  />
+                              </div>
+                              <select value={transactionStatusFilter} onChange={(e) => setTransactionStatusFilter(e.target.value as any)} className="bg-slate-50 dark:bg-slate-700 px-3 py-2.5 rounded-xl text-sm outline-none dark:text-white border border-slate-200 dark:border-slate-600 cursor-pointer">
+                                  <option value="All">All Status</option>
+                                  <option value="Success">Success</option>
+                                  <option value="Pending">Pending</option>
+                                  <option value="Failed">Failed</option>
+                              </select>
+                          </div>
+                          <button onClick={() => setShowRecordPayment(true)} className="bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-lg shadow-indigo-200 dark:shadow-none">
+                              <Plus className="w-4 h-4" /> Record Payment
                           </button>
                       </div>
-                      <table className="w-full text-left text-sm">
-                          <thead className="bg-slate-50 dark:bg-slate-700/50 text-xs uppercase text-slate-400 font-semibold">
-                              <tr>
-                                  <th className="px-6 py-4">Clinic</th>
-                                  <th className="px-6 py-4">Plan</th>
-                                  <th className="px-6 py-4">Cost</th>
-                                  <th className="px-6 py-4">Last Paid</th>
-                                  <th className="px-6 py-4">Next Due</th>
-                                  <th className="px-6 py-4">Status</th>
-                                  <th className="px-6 py-4 text-right">Actions</th>
-                              </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-50 dark:divide-slate-700">
-                              {clinics.filter(c => c.plan !== 'Free').map(clinic => {
-                                  const planCost = platformSettings.pricing[clinic.plan.toLowerCase() as keyof typeof platformSettings.pricing];
-                                  const isOverdue = clinic.nextPaymentDate !== '-' && new Date(clinic.nextPaymentDate) < new Date();
-                                  
-                                  return (
-                                      <tr key={clinic.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                                          <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">{clinic.name}</td>
-                                          <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{clinic.plan}</td>
-                                          <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200">KSh {planCost.toLocaleString()}</td>
-                                          <td className="px-6 py-4 text-slate-500 text-xs">{clinic.lastPaymentDate}</td>
-                                          <td className="px-6 py-4 text-slate-500 text-xs">{clinic.nextPaymentDate}</td>
-                                          <td className="px-6 py-4">
-                                              <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase border ${
-                                                  isOverdue 
-                                                  ? 'bg-red-50 text-red-700 border-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-900' 
-                                                  : 'bg-green-50 text-green-700 border-green-100 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900'
-                                              }`}>
-                                                  {isOverdue ? 'Overdue' : 'Active'}
-                                              </span>
+
+                      <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+                          <table className="w-full text-left text-sm">
+                              <thead className="bg-slate-50 dark:bg-slate-700/50 text-xs uppercase text-slate-400 font-semibold border-b border-slate-100 dark:border-slate-700">
+                                  <tr>
+                                      <th className="px-6 py-4">Transaction ID</th>
+                                      <th className="px-6 py-4">Clinic</th>
+                                      <th className="px-6 py-4">Date</th>
+                                      <th className="px-6 py-4">Plan</th>
+                                      <th className="px-6 py-4">Amount</th>
+                                      <th className="px-6 py-4">Method</th>
+                                      <th className="px-6 py-4 text-center">Status</th>
+                                      <th className="px-6 py-4 text-right">Actions</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-50 dark:divide-slate-700">
+                                  {filteredTransactions.map(tx => (
+                                      <tr key={tx.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                                          <td className="px-6 py-4 font-mono text-xs text-slate-500">{tx.id}</td>
+                                          <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">{tx.clinicName}</td>
+                                          <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{tx.date}</td>
+                                          <td className="px-6 py-4">{tx.plan}</td>
+                                          <td className="px-6 py-4 font-mono font-bold">KSh {tx.amount.toLocaleString()}</td>
+                                          <td className="px-6 py-4 text-xs text-slate-500">{tx.method}</td>
+                                          <td className="px-6 py-4 text-center">
+                                              <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
+                                                  tx.status === 'Success' ? 'bg-green-100 text-green-700' :
+                                                  tx.status === 'Pending' ? 'bg-orange-100 text-orange-700' :
+                                                  'bg-red-100 text-red-700'
+                                              }`}>{tx.status}</span>
                                           </td>
                                           <td className="px-6 py-4 text-right">
                                               <div className="flex justify-end gap-2">
-                                                  <button 
-                                                    className="p-1.5 bg-slate-100 dark:bg-slate-700 rounded text-slate-500 hover:text-indigo-600 transition-colors" 
-                                                    title="Generate Invoice"
-                                                    onClick={() => showNotification('Invoice generated and sent to admin email.', 'success')}
-                                                  >
-                                                      <Receipt className="w-4 h-4"/>
+                                                  <button onClick={() => handleGenerateInvoice(tx)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg" title="View Receipt">
+                                                      <Receipt className="w-4 h-4" />
                                                   </button>
-                                                  <button 
-                                                    onClick={() => {
-                                                        setRecordPaymentForm({ ...recordPaymentForm, clinicId: clinic.id, amount: planCost.toString() });
-                                                        setShowRecordPayment(true);
-                                                    }}
-                                                    className="p-1.5 bg-indigo-50 dark:bg-indigo-900/30 rounded text-indigo-600 hover:bg-indigo-100 transition-colors" 
-                                                    title="Pay"
-                                                  >
-                                                      <CreditCard className="w-4 h-4"/>
-                                                  </button>
+                                                  {tx.status === 'Success' && (
+                                                      <button onClick={() => handleRefund(tx.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg" title="Refund">
+                                                          <Undo2 className="w-4 h-4" />
+                                                      </button>
+                                                  )}
                                               </div>
                                           </td>
                                       </tr>
-                                  );
-                              })}
-                              {clinics.filter(c => c.plan !== 'Free').length === 0 && (
-                                  <tr><td colSpan={7} className="p-8 text-center text-slate-400">No active paid subscriptions.</td></tr>
-                              )}
-                          </tbody>
-                      </table>
-                  </div>
-              </div>
-          );
-      };
+                                  ))}
+                              </tbody>
+                          </table>
+                      </div>
+                  </>
+              )}
 
-      const renderGateways = () => {
-          return (
-              <div className="space-y-6 animate-in fade-in">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* M-Pesa Config */}
-                      <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
-                          <div className="flex items-center gap-3 mb-6">
-                              <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-xl text-green-600">
-                                  <Smartphone className="w-6 h-6" />
-                              </div>
-                              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Mobile Money (M-Pesa)</h3>
-                          </div>
-                          
-                          <div className="space-y-4">
-                              <div>
-                                  <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Paybill Number</label>
-                                  <input 
-                                    value={gatewayConfig.mpesa.paybill}
-                                    onChange={(e) => setGatewayConfig({...gatewayConfig, mpesa: {...gatewayConfig.mpesa, paybill: e.target.value}})}
-                                    className="w-full p-3 bg-slate-50 dark:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-600 outline-none font-mono dark:text-white" 
-                                  />
-                              </div>
-                              <div>
-                                  <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Account Name</label>
-                                  <input 
-                                    value={gatewayConfig.mpesa.account}
-                                    onChange={(e) => setGatewayConfig({...gatewayConfig, mpesa: {...gatewayConfig.mpesa, account: e.target.value}})}
-                                    className="w-full p-3 bg-slate-50 dark:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-600 outline-none dark:text-white" 
-                                  />
-                              </div>
-                              <div>
-                                  <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Business Name Display</label>
-                                  <input 
-                                    value={gatewayConfig.mpesa.name}
-                                    onChange={(e) => setGatewayConfig({...gatewayConfig, mpesa: {...gatewayConfig.mpesa, name: e.target.value}})}
-                                    className="w-full p-3 bg-slate-50 dark:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-600 outline-none dark:text-white" 
-                                  />
-                              </div>
-                          </div>
+              {paymentsSubTab === 'gateways' && (
+                  <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 max-w-4xl mx-auto">
+                      <div className="flex justify-between items-center mb-8">
+                          <h3 className="text-xl font-bold text-slate-900 dark:text-white">Payment Gateways</h3>
+                          <button 
+                              onClick={handleSaveGateways}
+                              disabled={isProcessing === 'save-gateways'}
+                              className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
+                          >
+                              {isProcessing === 'save-gateways' ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>} Save Changes
+                          </button>
                       </div>
 
-                      {/* Bank Config */}
-                      <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
-                          <div className="flex items-center gap-3 mb-6">
-                              <div className="p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl text-indigo-600">
-                                  <Landmark className="w-6 h-6" />
+                      <div className="space-y-8">
+                          <div className="p-6 bg-slate-50 dark:bg-slate-700/30 rounded-2xl border border-slate-200 dark:border-slate-600">
+                              <div className="flex items-center gap-3 mb-6">
+                                  <Smartphone className="w-6 h-6 text-green-600" />
+                                  <h4 className="text-lg font-bold text-slate-800 dark:text-white">M-Pesa Integration (Daraja API)</h4>
                               </div>
-                              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Bank Transfer</h3>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                  <div>
+                                      <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Paybill Number</label>
+                                      <input 
+                                          value={gatewayConfig.mpesa.paybill} 
+                                          onChange={(e) => setGatewayConfig({...gatewayConfig, mpesa: {...gatewayConfig.mpesa, paybill: e.target.value}})}
+                                          className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl text-sm outline-none dark:text-white"
+                                      />
+                                  </div>
+                                  <div>
+                                      <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Account Name</label>
+                                      <input 
+                                          value={gatewayConfig.mpesa.name} 
+                                          onChange={(e) => setGatewayConfig({...gatewayConfig, mpesa: {...gatewayConfig.mpesa, name: e.target.value}})}
+                                          className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl text-sm outline-none dark:text-white"
+                                      />
+                                  </div>
+                              </div>
                           </div>
-                          
-                          <div className="space-y-4">
-                              <div className="grid grid-cols-2 gap-4">
+
+                          <div className="p-6 bg-slate-50 dark:bg-slate-700/30 rounded-2xl border border-slate-200 dark:border-slate-600">
+                              <div className="flex items-center gap-3 mb-6">
+                                  <Landmark className="w-6 h-6 text-blue-600" />
+                                  <h4 className="text-lg font-bold text-slate-800 dark:text-white">Bank Details (Manual Transfer)</h4>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                   <div>
                                       <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Bank Name</label>
                                       <input 
-                                        value={gatewayConfig.bank.name}
-                                        onChange={(e) => setGatewayConfig({...gatewayConfig, bank: {...gatewayConfig.bank, name: e.target.value}})}
-                                        className="w-full p-3 bg-slate-50 dark:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-600 outline-none dark:text-white" 
+                                          value={gatewayConfig.bank.name} 
+                                          onChange={(e) => setGatewayConfig({...gatewayConfig, bank: {...gatewayConfig.bank, name: e.target.value}})}
+                                          className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl text-sm outline-none dark:text-white"
+                                      />
+                                  </div>
+                                  <div>
+                                      <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Account Number</label>
+                                      <input 
+                                          value={gatewayConfig.bank.account} 
+                                          onChange={(e) => setGatewayConfig({...gatewayConfig, bank: {...gatewayConfig.bank, account: e.target.value}})}
+                                          className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl text-sm outline-none dark:text-white"
                                       />
                                   </div>
                                   <div>
                                       <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Branch</label>
                                       <input 
-                                        value={gatewayConfig.bank.branch}
-                                        onChange={(e) => setGatewayConfig({...gatewayConfig, bank: {...gatewayConfig.bank, branch: e.target.value}})}
-                                        className="w-full p-3 bg-slate-50 dark:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-600 outline-none dark:text-white" 
+                                          value={gatewayConfig.bank.branch} 
+                                          onChange={(e) => setGatewayConfig({...gatewayConfig, bank: {...gatewayConfig.bank, branch: e.target.value}})}
+                                          className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl text-sm outline-none dark:text-white"
                                       />
                                   </div>
-                              </div>
-                              <div>
-                                  <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Account Number</label>
-                                  <input 
-                                    value={gatewayConfig.bank.account}
-                                    onChange={(e) => setGatewayConfig({...gatewayConfig, bank: {...gatewayConfig.bank, account: e.target.value}})}
-                                    className="w-full p-3 bg-slate-50 dark:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-600 outline-none font-mono dark:text-white" 
-                                  />
-                              </div>
-                              <div>
-                                  <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Swift Code</label>
-                                  <input 
-                                    value={gatewayConfig.bank.swift}
-                                    onChange={(e) => setGatewayConfig({...gatewayConfig, bank: {...gatewayConfig.bank, swift: e.target.value}})}
-                                    className="w-full p-3 bg-slate-50 dark:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-600 outline-none font-mono dark:text-white" 
-                                  />
+                                  <div>
+                                      <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Swift Code</label>
+                                      <input 
+                                          value={gatewayConfig.bank.swift} 
+                                          onChange={(e) => setGatewayConfig({...gatewayConfig, bank: {...gatewayConfig.bank, swift: e.target.value}})}
+                                          className="w-full p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl text-sm outline-none dark:text-white"
+                                      />
+                                  </div>
                               </div>
                           </div>
                       </div>
                   </div>
-                  
-                  <div className="flex justify-end">
-                      <button 
-                        onClick={handleSaveGateways}
-                        disabled={isProcessing === 'save-gateways'}
-                        className="px-6 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold rounded-xl hover:opacity-90 flex items-center gap-2 disabled:opacity-50"
-                      >
-                          {isProcessing === 'save-gateways' ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>} 
-                          Save Gateway Configuration
-                      </button>
-                  </div>
-              </div>
-          );
-      };
+              )}
+          </div>
+      );
+  };
+
+  const renderSettings = () => {
+      const filteredLogs = systemLogs.filter(l => 
+          (logFilter.type === 'All' || l.action.toLowerCase().includes(logFilter.type.toLowerCase())) &&
+          (l.admin.toLowerCase().includes(logFilter.search.toLowerCase()) || l.target.toLowerCase().includes(logFilter.search.toLowerCase()))
+      );
 
       return (
-        <div className="space-y-6">
-            {/* Payment Sub Tabs */}
-            <div className="flex gap-2 border-b border-slate-200 dark:border-slate-700 pb-2 overflow-x-auto">
-                <button onClick={() => setPaymentsSubTab('transactions')} className={`px-4 py-2 text-sm font-bold rounded-lg transition-colors ${paymentsSubTab === 'transactions' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-400' : 'text-slate-500 hover:text-slate-700'}`}>Transactions</button>
-                <button onClick={() => setPaymentsSubTab('subscriptions')} className={`px-4 py-2 text-sm font-bold rounded-lg transition-colors ${paymentsSubTab === 'subscriptions' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-400' : 'text-slate-500 hover:text-slate-700'}`}>Subscriptions</button>
-                <button onClick={() => setPaymentsSubTab('gateways')} className={`px-4 py-2 text-sm font-bold rounded-lg transition-colors ${paymentsSubTab === 'gateways' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-400' : 'text-slate-500 hover:text-slate-700'}`}>Payment Settings</button>
-            </div>
+          <div className="space-y-6 animate-in fade-in">
+              <div className="flex bg-slate-100 dark:bg-slate-800/50 p-1 rounded-xl w-fit">
+                  {['general', 'pricing', 'logs', 'backups'].map(tab => (
+                      <button
+                          key={tab}
+                          onClick={() => setSettingsSubTab(tab as any)}
+                          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all capitalize ${
+                              settingsSubTab === tab ? 'bg-white dark:bg-slate-700 shadow text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'
+                          }`}
+                      >
+                          {tab}
+                      </button>
+                  ))}
+              </div>
 
-            {/* Stats Cards (Always Visible in Payments Tab) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex justify-between items-start">
-                    <div>
-                        <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Total Volume</p>
-                        <h3 className="text-3xl font-bold text-slate-900 dark:text-white mt-1">KSh {transactions.reduce((a,b) => a+b.amount, 0).toLocaleString()}</h3>
-                        <div className="mt-2 text-sm text-green-600 font-medium flex items-center gap-1">
-                            <span className="bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded text-xs">↑ 8.5%</span>
-                            <span className="text-slate-400 font-normal ml-1">vs last month</span>
-                        </div>
-                    </div>
-                    <div className="p-3 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 rounded-xl">
-                        <CreditCard className="w-6 h-6"/>
-                    </div>
-                </div>
-
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex justify-between items-start">
-                    <div>
-                        <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Success Rate</p>
-                        <h3 className="text-3xl font-bold text-green-600 mt-1">
-                            {Math.round((transactions.filter(t => t.status === 'Success').length / transactions.length) * 100)}%
-                        </h3>
-                        <p className="text-xs text-slate-400 mt-2">{transactions.filter(t => t.status === 'Success').length} completed</p>
-                    </div>
-                    <div className="p-3 bg-green-50 dark:bg-green-900/20 text-green-600 rounded-xl">
-                        <CheckCircle className="w-6 h-6"/>
-                    </div>
-                </div>
-
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex justify-between items-start">
-                    <div>
-                        <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Failed / Pending</p>
-                        <h3 className="text-3xl font-bold text-slate-900 dark:text-white mt-1">{transactions.filter(t => t.status === 'Failed' || t.status === 'Pending').length}</h3>
-                        <p className="text-xs text-red-500 font-medium mt-2">Action required</p>
-                    </div>
-                    <div className="p-3 bg-orange-50 dark:bg-orange-900/20 text-orange-600 rounded-xl">
-                        <AlertTriangle className="w-6 h-6"/>
-                    </div>
-                </div>
-            </div>
-
-            {/* Content Switched by SubTab */}
-            {paymentsSubTab === 'transactions' && renderTransactions()}
-            {paymentsSubTab === 'subscriptions' && renderSubscriptions()}
-            {paymentsSubTab === 'gateways' && renderGateways()}
-        </div>
-      );
-  }
-
-  const renderSettings = () => (
-      <div className="space-y-6 animate-in fade-in">
-          {/* Sub Navigation */}
-          <div className="flex gap-2 border-b border-slate-200 dark:border-slate-700 pb-2 overflow-x-auto">
-                <button onClick={() => setSettingsSubTab('general')} className={`px-4 py-2 text-sm font-bold rounded-lg transition-colors ${settingsSubTab === 'general' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-400' : 'text-slate-500 hover:text-slate-700'}`}>Configuration</button>
-                <button onClick={() => setSettingsSubTab('pricing')} className={`px-4 py-2 text-sm font-bold rounded-lg transition-colors ${settingsSubTab === 'pricing' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-400' : 'text-slate-500 hover:text-slate-700'}`}>Pricing Models</button>
-                <button onClick={() => setSettingsSubTab('logs')} className={`px-4 py-2 text-sm font-bold rounded-lg transition-colors ${settingsSubTab === 'logs' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-400' : 'text-slate-500 hover:text-slate-700'}`}>System Logs</button>
-                <button onClick={() => setSettingsSubTab('backups')} className={`px-4 py-2 text-sm font-bold rounded-lg transition-colors ${settingsSubTab === 'backups' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-400' : 'text-slate-500 hover:text-slate-700'}`}>Database & Backups</button>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* General SaaS Config */}
               {settingsSubTab === 'general' && (
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 h-fit lg:col-span-2">
-                    <h3 className="font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
-                        <Settings className="w-5 h-5 text-slate-400" /> Platform Configuration
-                    </h3>
-                    
-                    <div className="space-y-6 max-w-2xl">
-                        <div className="flex items-center justify-between p-4 border border-slate-100 dark:border-slate-700 rounded-xl">
-                            <div>
-                                <div className="font-bold text-slate-900 dark:text-white text-sm">Maintenance Mode</div>
-                                <div className="text-xs text-slate-500">Suspends all clinic access for updates.</div>
-                            </div>
-                            <button onClick={() => toggleSettings('maintenanceMode')} className={`text-2xl transition-colors ${platformSettings.maintenanceMode ? 'text-indigo-600' : 'text-slate-300'}`}>
-                                {platformSettings.maintenanceMode ? <ToggleRight className="w-10 h-10"/> : <ToggleLeft className="w-10 h-10"/>}
-                            </button>
-                        </div>
-                        
-                        <div className="flex items-center justify-between p-4 border border-slate-100 dark:border-slate-700 rounded-xl">
-                            <div>
-                                <div className="font-bold text-slate-900 dark:text-white text-sm">Allow New Registrations</div>
-                                <div className="text-xs text-slate-500">Public sign-up page visibility.</div>
-                            </div>
-                            <button onClick={() => toggleSettings('allowNewRegistrations')} className={`text-2xl transition-colors ${platformSettings.allowNewRegistrations ? 'text-indigo-600' : 'text-slate-300'}`}>
-                                {platformSettings.allowNewRegistrations ? <ToggleRight className="w-10 h-10"/> : <ToggleLeft className="w-10 h-10"/>}
-                            </button>
-                        </div>
+                  <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 max-w-4xl">
+                      <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6">Platform Configuration</h3>
+                      <div className="space-y-6">
+                          <div className="flex items-center justify-between p-4 border border-slate-200 dark:border-slate-600 rounded-xl">
+                              <div>
+                                  <div className="font-bold text-slate-800 dark:text-white">Maintenance Mode</div>
+                                  <div className="text-xs text-slate-500">Disable access for all non-admin users</div>
+                              </div>
+                              <button 
+                                  onClick={() => toggleSettings('maintenanceMode')}
+                                  className={`w-12 h-6 rounded-full relative transition-colors ${platformSettings.maintenanceMode ? 'bg-indigo-600' : 'bg-slate-300'}`}
+                              >
+                                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${platformSettings.maintenanceMode ? 'left-7' : 'left-1'}`}></div>
+                              </button>
+                          </div>
+                          
+                          <div className="flex items-center justify-between p-4 border border-slate-200 dark:border-slate-600 rounded-xl">
+                              <div>
+                                  <div className="font-bold text-slate-800 dark:text-white">Allow New Registrations</div>
+                                  <div className="text-xs text-slate-500">Enable new clinics to sign up</div>
+                              </div>
+                              <button 
+                                  onClick={() => toggleSettings('allowNewRegistrations')}
+                                  className={`w-12 h-6 rounded-full relative transition-colors ${platformSettings.allowNewRegistrations ? 'bg-green-600' : 'bg-slate-300'}`}
+                              >
+                                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${platformSettings.allowNewRegistrations ? 'left-7' : 'left-1'}`}></div>
+                              </button>
+                          </div>
 
-                        <div>
-                            <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Global Announcement</label>
-                            <textarea 
-                                className="w-full p-3 bg-slate-50 dark:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-600 outline-none text-sm dark:text-white"
-                                rows={3}
-                                placeholder="Message to display on all clinic dashboards..."
-                                value={platformSettings.globalAnnouncement}
-                                onChange={(e) => setPlatformSettings({...platformSettings, globalAnnouncement: e.target.value})}
-                            />
-                        </div>
-
-                        <button 
-                            onClick={handleSaveSettings}
-                            disabled={isProcessing === 'save-settings'}
-                            className="w-full py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold rounded-xl hover:opacity-90 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                        >
-                            {isProcessing === 'save-settings' ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4" />}
-                            Save Configuration
-                        </button>
-                    </div>
-                </div>
+                          <div className="pt-6 border-t border-slate-100 dark:border-slate-700">
+                              <label className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 block">Global Announcement</label>
+                              <div className="flex gap-2">
+                                  <input 
+                                      value={platformSettings.globalAnnouncement}
+                                      onChange={(e) => setPlatformSettings({...platformSettings, globalAnnouncement: e.target.value})}
+                                      className="flex-1 p-3 bg-slate-50 dark:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-600 outline-none text-sm dark:text-white"
+                                      placeholder="Message visible to all tenants..."
+                                  />
+                                  <button onClick={handleSaveSettings} className="bg-indigo-600 text-white px-4 rounded-xl text-sm font-bold hover:bg-indigo-700">Save</button>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
               )}
 
-              {/* Pricing Config */}
               {settingsSubTab === 'pricing' && (
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 lg:col-span-2">
-                    <h3 className="font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
-                        <DollarSign className="w-5 h-5 text-slate-400" /> Pricing Tiers (KSh)
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="p-4 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-700/30">
-                            <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Free Tier</label>
-                            <input type="number" value={platformSettings.pricing.free} disabled className="w-full p-3 bg-slate-100 dark:bg-slate-700/50 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-bold text-slate-500 cursor-not-allowed" />
-                        </div>
-                        <div className="p-4 border border-slate-200 dark:border-slate-700 rounded-xl">
-                            <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Pro Tier</label>
-                            <input 
-                                type="number" 
-                                value={platformSettings.pricing.pro}
-                                onChange={(e) => setPlatformSettings({...platformSettings, pricing: {...platformSettings.pricing, pro: parseInt(e.target.value)}})}
-                                className="w-full p-3 bg-slate-50 dark:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" 
-                            />
-                        </div>
-                        <div className="p-4 border border-slate-200 dark:border-slate-700 rounded-xl">
-                            <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Enterprise Tier</label>
-                            <input 
-                                type="number" 
-                                value={platformSettings.pricing.enterprise}
-                                onChange={(e) => setPlatformSettings({...platformSettings, pricing: {...platformSettings.pricing, enterprise: parseInt(e.target.value)}})}
-                                className="w-full p-3 bg-slate-50 dark:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" 
-                            />
-                        </div>
-                    </div>
-                    <button 
-                        onClick={handleSavePricing}
-                        disabled={isProcessing === 'save-pricing'}
-                        className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors mt-6 flex items-center justify-center gap-2 disabled:opacity-50"
-                    >
-                        {isProcessing === 'save-pricing' ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4" />}
-                        Save Pricing Changes
-                    </button>
-                </div>
+                  <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 max-w-4xl">
+                      <div className="flex justify-between items-center mb-6">
+                          <h3 className="text-lg font-bold text-slate-900 dark:text-white">Subscription Pricing</h3>
+                          <button 
+                              onClick={handleSavePricing}
+                              disabled={isProcessing === 'save-pricing'}
+                              className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 disabled:opacity-50"
+                          >
+                              {isProcessing === 'save-pricing' ? 'Saving...' : 'Update Pricing'}
+                          </button>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                          <div className="p-6 border-2 border-slate-100 dark:border-slate-700 rounded-2xl">
+                              <div className="text-center mb-4">
+                                  <h4 className="font-bold text-slate-600 dark:text-slate-400">Free Tier</h4>
+                              </div>
+                              <div className="flex items-center justify-center gap-1 mb-2">
+                                  <span className="text-slate-400 text-sm">KSh</span>
+                                  <input 
+                                      type="number"
+                                      value={platformSettings.pricing.free}
+                                      onChange={(e) => setPlatformSettings({...platformSettings, pricing: {...platformSettings.pricing, free: parseInt(e.target.value)}})}
+                                      className="w-20 p-1 text-center font-bold text-xl bg-transparent border-b border-slate-300 outline-none dark:text-white"
+                                  />
+                              </div>
+                              <p className="text-center text-xs text-slate-400">/ month</p>
+                          </div>
+                          <div className="p-6 border-2 border-indigo-100 dark:border-indigo-900/30 bg-indigo-50/50 dark:bg-indigo-900/10 rounded-2xl relative">
+                              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white px-2 py-0.5 rounded text-[10px] uppercase font-bold">Popular</div>
+                              <div className="text-center mb-4">
+                                  <h4 className="font-bold text-indigo-700 dark:text-indigo-400">Pro Tier</h4>
+                              </div>
+                              <div className="flex items-center justify-center gap-1 mb-2">
+                                  <span className="text-slate-400 text-sm">KSh</span>
+                                  <input 
+                                      type="number"
+                                      value={platformSettings.pricing.pro}
+                                      onChange={(e) => setPlatformSettings({...platformSettings, pricing: {...platformSettings.pricing, pro: parseInt(e.target.value)}})}
+                                      className="w-24 p-1 text-center font-bold text-xl bg-transparent border-b border-indigo-300 outline-none text-indigo-900 dark:text-white"
+                                  />
+                              </div>
+                              <p className="text-center text-xs text-slate-400">/ month</p>
+                          </div>
+                          <div className="p-6 border-2 border-slate-100 dark:border-slate-700 rounded-2xl">
+                              <div className="text-center mb-4">
+                                  <h4 className="font-bold text-slate-600 dark:text-slate-400">Enterprise</h4>
+                              </div>
+                              <div className="flex items-center justify-center gap-1 mb-2">
+                                  <span className="text-slate-400 text-sm">KSh</span>
+                                  <input 
+                                      type="number"
+                                      value={platformSettings.pricing.enterprise}
+                                      onChange={(e) => setPlatformSettings({...platformSettings, pricing: {...platformSettings.pricing, enterprise: parseInt(e.target.value)}})}
+                                      className="w-24 p-1 text-center font-bold text-xl bg-transparent border-b border-slate-300 outline-none dark:text-white"
+                                  />
+                              </div>
+                              <p className="text-center text-xs text-slate-400">/ month</p>
+                          </div>
+                      </div>
+                  </div>
               )}
 
-              {/* Logs */}
               {settingsSubTab === 'logs' && (
-                  <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 lg:col-span-2">
-                      <h3 className="font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
-                          <Activity className="w-5 h-5 text-slate-400" /> System Audit Logs
-                      </h3>
+                  <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
+                      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+                          <h3 className="font-bold text-slate-900 dark:text-white">System Audit Logs</h3>
+                          <div className="flex gap-2 w-full sm:w-auto">
+                              <input 
+                                  placeholder="Search logs..." 
+                                  value={logFilter.search}
+                                  onChange={(e) => setLogFilter({...logFilter, search: e.target.value})}
+                                  className="pl-4 pr-4 py-2 bg-slate-50 dark:bg-slate-700 rounded-lg text-sm outline-none dark:text-white border border-slate-200 dark:border-slate-600 w-full sm:w-64" 
+                              />
+                              <button onClick={() => exportToCSV(filteredLogs, 'audit_logs')} className="p-2 border border-slate-200 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-500">
+                                  <Download className="w-4 h-4"/>
+                              </button>
+                          </div>
+                      </div>
                       <div className="overflow-x-auto">
                           <table className="w-full text-left text-sm">
                               <thead className="bg-slate-50 dark:bg-slate-700/50 text-xs uppercase text-slate-400 font-semibold border-b border-slate-100 dark:border-slate-700">
                                   <tr>
                                       <th className="px-6 py-4">Timestamp</th>
                                       <th className="px-6 py-4">Action</th>
-                                      <th className="px-6 py-4">Initiated By</th>
+                                      <th className="px-6 py-4">Admin</th>
                                       <th className="px-6 py-4">Target</th>
-                                      <th className="px-6 py-4">Status</th>
+                                      <th className="px-6 py-4 text-center">Status</th>
                                   </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-50 dark:divide-slate-700">
-                                  {systemLogs.map(log => (
+                                  {filteredLogs.map(log => (
                                       <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                                          <td className="px-6 py-4 text-slate-500 font-mono text-xs">{new Date(log.timestamp).toLocaleString()}</td>
+                                          <td className="px-6 py-4 text-xs font-mono text-slate-500">{new Date(log.timestamp).toLocaleString()}</td>
                                           <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">{log.action}</td>
                                           <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{log.admin}</td>
-                                          <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{log.target}</td>
-                                          <td className="px-6 py-4">
-                                              <span className={`text-xs font-bold ${
-                                                  log.status === 'Success' ? 'text-green-600' :
-                                                  log.status === 'Warning' ? 'text-orange-600' : 'text-red-600'
+                                          <td className="px-6 py-4 text-slate-500">{log.target}</td>
+                                          <td className="px-6 py-4 text-center">
+                                              <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
+                                                  log.status === 'Success' ? 'bg-green-100 text-green-700' :
+                                                  log.status === 'Warning' ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'
                                               }`}>{log.status}</span>
                                           </td>
                                       </tr>
@@ -1272,43 +1201,59 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ currentUser, 
                   </div>
               )}
 
-              {/* Backups */}
               {settingsSubTab === 'backups' && (
-                  <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 lg:col-span-2">
-                      <div className="flex justify-between items-center mb-6">
-                          <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                              <Database className="w-5 h-5 text-slate-400" /> Database Snapshots
-                          </h3>
-                          <button className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors">Trigger Backup Now</button>
-                      </div>
+                  <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 max-w-4xl">
+                      <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6">Database Backups</h3>
                       
-                      <div className="space-y-4">
-                          {[
-                              { id: '1', date: 'Oct 28, 2023 02:00 AM', size: '2.4 GB', type: 'Automated' },
-                              { id: '2', date: 'Oct 27, 2023 02:00 AM', size: '2.3 GB', type: 'Automated' },
-                              { id: '3', date: 'Oct 26, 2023 04:15 PM', size: '2.3 GB', type: 'Manual' },
-                          ].map(backup => (
-                              <div key={backup.id} className="flex items-center justify-between p-4 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                                  <div className="flex items-center gap-4">
-                                      <div className="p-3 bg-slate-100 dark:bg-slate-700 rounded-lg text-slate-500">
-                                          <Database className="w-5 h-5"/>
-                                      </div>
-                                      <div>
-                                          <div className="font-bold text-slate-900 dark:text-white text-sm">{backup.date}</div>
-                                          <div className="text-xs text-slate-500">{backup.type} • {backup.size}</div>
-                                      </div>
-                                  </div>
-                                  <button className="text-sm text-indigo-600 font-bold hover:underline flex items-center gap-1">
-                                      <RefreshCw className="w-3 h-3"/> Restore
-                                  </button>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                          <div className="p-6 bg-slate-50 dark:bg-slate-700/30 rounded-2xl border border-slate-200 dark:border-slate-600">
+                              <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 rounded-full flex items-center justify-center mb-4">
+                                  <HardDrive className="w-6 h-6" />
                               </div>
-                          ))}
+                              <h4 className="font-bold text-slate-900 dark:text-white mb-1">Create Snapshot</h4>
+                              <p className="text-xs text-slate-500 mb-4">Manual backup of all tenant databases.</p>
+                              <button 
+                                  onClick={() => handleBackupOperation('create')}
+                                  className="w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700"
+                              >
+                                  Start Backup
+                              </button>
+                          </div>
+                          
+                          <div className="p-6 bg-slate-50 dark:bg-slate-700/30 rounded-2xl border border-slate-200 dark:border-slate-600">
+                              <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900/30 text-orange-600 rounded-full flex items-center justify-center mb-4">
+                                  <RefreshCw className="w-6 h-6" />
+                              </div>
+                              <h4 className="font-bold text-slate-900 dark:text-white mb-1">Restore Data</h4>
+                              <p className="text-xs text-slate-500 mb-4">Rollback to a previous system state.</p>
+                              <button 
+                                  onClick={() => handleBackupOperation('restore')}
+                                  className="w-full py-2 bg-white dark:bg-slate-600 border border-slate-300 dark:border-slate-500 text-slate-700 dark:text-white rounded-lg text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-500"
+                              >
+                                  Restore...
+                              </button>
+                          </div>
+                      </div>
+
+                      <div>
+                          <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-4">Recent Snapshots</h4>
+                          <div className="space-y-3">
+                              {[1, 2, 3].map((i) => (
+                                  <div key={i} className="flex items-center justify-between p-3 border border-slate-100 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                                      <div className="flex items-center gap-3">
+                                          <Database className="w-4 h-4 text-slate-400" />
+                                          <span className="text-sm font-mono text-slate-600 dark:text-slate-300">snapshot_v{45-i}_auto.sql</span>
+                                      </div>
+                                      <span className="text-xs text-slate-400">{i * 6} hours ago</span>
+                                  </div>
+                              ))}
+                          </div>
                       </div>
                   </div>
               )}
           </div>
-      </div>
-  );
+      );
+  };
 
   return (
     <div className="p-6 md:p-10 bg-gray-50 dark:bg-slate-900 min-h-screen transition-colors duration-200">
@@ -1323,6 +1268,7 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ currentUser, 
                     {activeTab === 'clinics' && 'Tenant Management'}
                     {activeTab === 'approvals' && 'Pending Requests'}
                     {activeTab === 'payments' && 'Financial Transactions & Subscriptions'}
+                    {activeTab === 'support' && 'Helpdesk Tickets'}
                     {activeTab === 'settings' && 'Global Configuration'}
                  </p>
             </div>
@@ -1343,10 +1289,205 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ currentUser, 
             {activeTab === 'clinics' && renderClinics()}
             {activeTab === 'approvals' && renderApprovals()} 
             {activeTab === 'payments' && renderPayments()}
+            {activeTab === 'support' && renderSupport()}
             {activeTab === 'settings' && renderSettings()}
         </div>
 
         {/* --- MODALS --- */}
+
+        {/* Ticket Detail Modal */}
+        {selectedTicket && (
+            <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in">
+                <div className="bg-white dark:bg-slate-800 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[85vh]">
+                    <div className="p-6 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50 flex justify-between items-start">
+                        <div>
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className="font-mono text-xs text-slate-500 bg-slate-200 dark:bg-slate-600 px-1.5 py-0.5 rounded">#{selectedTicket.id}</span>
+                                <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
+                                    selectedTicket.priority === 'Critical' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'
+                                }`}>{selectedTicket.priority} Priority</span>
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">{selectedTicket.subject}</h3>
+                            <p className="text-sm text-slate-500">{selectedTicket.clinicName} • {selectedTicket.dateCreated}</p>
+                        </div>
+                        <button onClick={() => setSelectedTicket(null)} className="text-slate-400 hover:text-slate-600"><XCircle className="w-6 h-6"/></button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-6 bg-slate-50 dark:bg-slate-900 space-y-4">
+                        {/* Mock Conversation */}
+                        <div className="flex gap-3">
+                            <div className="w-8 h-8 rounded-full bg-slate-300 flex-shrink-0 flex items-center justify-center"><User className="w-4 h-4 text-slate-600"/></div>
+                            <div className="bg-white dark:bg-slate-700 p-4 rounded-2xl rounded-tl-none shadow-sm max-w-[85%]">
+                                <p className="text-sm text-slate-700 dark:text-slate-200">Hi support, we are facing an issue with the SMS gateway since this morning. Messages are delayed.</p>
+                                <span className="text-[10px] text-slate-400 mt-2 block">10:00 AM</span>
+                            </div>
+                        </div>
+                        
+                        <div className="flex gap-3 flex-row-reverse">
+                            <div className="w-8 h-8 rounded-full bg-indigo-600 flex-shrink-0 flex items-center justify-center text-white font-bold text-xs">SA</div>
+                            <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 p-4 rounded-2xl rounded-tr-none shadow-sm max-w-[85%]">
+                                <p className="text-sm text-indigo-900 dark:text-indigo-200">Hello, thanks for reporting. We are checking the gateway status now.</p>
+                                <span className="text-[10px] text-indigo-400 mt-2 block">10:15 AM</span>
+                            </div>
+                        </div>
+
+                        {selectedTicket.status === 'Resolved' && (
+                            <div className="flex justify-center my-4">
+                                <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+                                    <CheckCircle className="w-3 h-3"/> Ticket Resolved
+                                </span>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="p-4 bg-white dark:bg-slate-800 border-t border-slate-100 dark:border-slate-700">
+                        {selectedTicket.status !== 'Resolved' ? (
+                            <div className="flex gap-2">
+                                <textarea 
+                                    className="flex-1 p-3 bg-slate-50 dark:bg-slate-700 border-none rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white text-sm resize-none"
+                                    rows={2}
+                                    placeholder="Type your reply..."
+                                    value={ticketReply}
+                                    onChange={(e) => setTicketReply(e.target.value)}
+                                />
+                                <div className="flex flex-col gap-2">
+                                    <button 
+                                        onClick={handleSendReply}
+                                        disabled={isProcessing === 'reply' || !ticketReply}
+                                        className="p-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50"
+                                    >
+                                        {isProcessing === 'reply' ? <Loader2 className="w-5 h-5 animate-spin"/> : <Send className="w-5 h-5"/>}
+                                    </button>
+                                    <button 
+                                        onClick={() => handleResolveTicket(selectedTicket.id)}
+                                        className="p-3 bg-green-50 text-green-600 rounded-xl hover:bg-green-100" 
+                                        title="Mark Resolved"
+                                    >
+                                        <CheckCircle className="w-5 h-5"/>
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <button 
+                                onClick={() => {
+                                    const reopened = { ...selectedTicket, status: 'Open' as const };
+                                    setSupportTickets(prev => prev.map(t => t.id === selectedTicket.id ? reopened : t));
+                                    setSelectedTicket(reopened);
+                                }}
+                                className="w-full py-3 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600"
+                            >
+                                Reopen Ticket
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* Invoice Modal */}
+        {showInvoice && currentInvoiceData && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in">
+                <div className="bg-white w-full max-w-2xl rounded-sm shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+                    {/* Invoice Paper Style */}
+                    <div className="p-8 flex-1 overflow-y-auto font-serif text-slate-800 bg-white">
+                        <div className="flex justify-between items-start border-b-2 border-slate-800 pb-6 mb-6">
+                            <div>
+                                <h1 className="text-3xl font-bold tracking-tight mb-2">INVOICE</h1>
+                                <p className="text-sm text-slate-500 font-sans">#{currentInvoiceData.id}</p>
+                            </div>
+                            <div className="text-right font-sans">
+                                <h2 className="text-xl font-bold text-indigo-600">JuaAfya SaaS Ltd</h2>
+                                <p className="text-xs text-slate-500">Nairobi, Kenya</p>
+                                <p className="text-xs text-slate-500">VAT: P000123456</p>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-between mb-8 font-sans text-sm">
+                            <div>
+                                <p className="text-xs font-bold text-slate-400 uppercase mb-1">Bill To:</p>
+                                <p className="font-bold text-lg">{currentInvoiceData.clinicName}</p>
+                                <p className="text-slate-500">Subscription: {currentInvoiceData.plan}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-xs font-bold text-slate-400 uppercase mb-1">Date:</p>
+                                <p className="font-bold">{currentInvoiceData.date}</p>
+                                <p className="text-xs font-bold text-slate-400 uppercase mt-2 mb-1">Status:</p>
+                                <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold uppercase ${currentInvoiceData.status === 'Success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                    {currentInvoiceData.status === 'Success' ? 'PAID' : 'UNPAID'}
+                                </span>
+                            </div>
+                        </div>
+
+                        <table className="w-full mb-8 border-collapse font-sans text-sm">
+                            <thead>
+                                <tr className="bg-slate-100 border-y border-slate-200">
+                                    <th className="py-3 px-4 text-left font-bold text-slate-600">Description</th>
+                                    <th className="py-3 px-4 text-right font-bold text-slate-600">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr className="border-b border-slate-100">
+                                    <td className="py-4 px-4">JuaAfya {currentInvoiceData.plan} Plan Subscription (Monthly)</td>
+                                    <td className="py-4 px-4 text-right">KSh {currentInvoiceData.amount.toLocaleString()}</td>
+                                </tr>
+                                <tr className="border-b border-slate-100">
+                                    <td className="py-4 px-4">Tax (16% VAT)</td>
+                                    <td className="py-4 px-4 text-right">KSh {(currentInvoiceData.amount * 0.16).toLocaleString()}</td>
+                                </tr>
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td className="py-4 px-4 text-right font-bold text-lg">Total</td>
+                                    <td className="py-4 px-4 text-right font-bold text-lg">KSh {(currentInvoiceData.amount * 1.16).toLocaleString()}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+
+                        <div className="text-center text-xs text-slate-400 font-sans mt-12">
+                            <p>Thank you for your business.</p>
+                            <p>For inquiries, contact billing@juaafya.com</p>
+                        </div>
+                    </div>
+
+                    {/* Footer Actions */}
+                    <div className="bg-slate-50 border-t border-slate-200 p-4 flex justify-between items-center font-sans">
+                        <button onClick={() => setShowInvoice(false)} className="text-slate-500 font-bold hover:text-slate-700">Close</button>
+                        <div className="flex gap-3">
+                            <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg font-bold text-slate-600 hover:bg-white transition-colors">
+                                <Printer className="w-4 h-4"/> Print
+                            </button>
+                            <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition-colors shadow-lg">
+                                <Download className="w-4 h-4"/> Download PDF
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* Backup Progress Modal */}
+        {showBackupProgress && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md animate-in fade-in">
+                <div className="bg-white dark:bg-slate-800 w-full max-w-md rounded-2xl p-8 shadow-2xl text-center">
+                    <div className="mb-6 relative inline-block">
+                        <Database className={`w-16 h-16 ${backupType === 'restore' ? 'text-orange-500' : 'text-indigo-500'} animate-pulse`} />
+                        <div className="absolute inset-0 border-4 border-indigo-100 rounded-full animate-ping opacity-25"></div>
+                    </div>
+                    <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
+                        {backupType === 'create' ? 'Creating System Snapshot...' : 'Restoring Database...'}
+                    </h3>
+                    <p className="text-slate-500 dark:text-slate-400 mb-8">Please wait. Do not close this window.</p>
+                    
+                    <div className="w-full bg-slate-100 dark:bg-slate-700 h-4 rounded-full overflow-hidden relative mb-2">
+                        <div 
+                            className={`h-full transition-all duration-300 ${backupType === 'create' ? 'bg-indigo-600' : 'bg-orange-500'}`}
+                            style={{ width: `${backupProgress}%` }}
+                        ></div>
+                    </div>
+                    <p className="text-sm font-bold text-slate-600 dark:text-slate-300">{backupProgress}% Complete</p>
+                </div>
+            </div>
+        )}
 
         {/* Record Payment Modal */}
         {showRecordPayment && (
