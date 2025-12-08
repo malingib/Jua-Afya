@@ -1,6 +1,8 @@
+
 import React, { useState } from 'react';
 import { TeamMember } from '../types';
-import { Lock, Mail, ChevronRight, Activity, Eye, EyeOff, Globe, Phone, ShieldCheck, User, Zap, Building2, ArrowRight, CheckCircle, Clock } from 'lucide-react';
+import { Lock, Mail, ChevronRight, Activity, Eye, EyeOff, Globe, Phone, ShieldCheck, User, Zap, Building2, ArrowRight, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { supabase } from '../lib/supabaseClient';
 
 interface LoginProps {
   onLogin: (user: TeamMember) => void;
@@ -30,34 +32,53 @@ const Login: React.FC<LoginProps> = ({ onLogin, team, systemAdmin }) => {
     confirmPassword: ''
   });
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    setTimeout(() => {
-      let user: TeamMember | undefined;
+    try {
+        // 1. Attempt Supabase Login
+        const { data, error: authError } = await supabase.auth.signInWithPassword({
+            email: loginForm.email,
+            password: loginForm.password,
+        });
 
-      if (loginForm.email.toLowerCase() === systemAdmin.email.toLowerCase()) {
-          user = systemAdmin;
-      } else {
-          user = team.find(m => m.email.toLowerCase() === loginForm.email.toLowerCase());
-      }
+        if (authError) throw authError;
 
-      if (user) {
-        onLogin(user);
-      } else {
-        setError('Invalid email or password');
+        if (data.user) {
+            // Construct User Object (In a real app, fetch profile from 'profiles' table)
+            const user: TeamMember = {
+                id: data.user.id,
+                name: data.user.user_metadata.full_name || loginForm.email.split('@')[0],
+                email: data.user.email || '',
+                role: (data.user.user_metadata.role as any) || 'Doctor',
+                status: 'Active',
+                lastActive: 'Now',
+                avatar: `https://ui-avatars.com/api/?name=${data.user.email}`
+            };
+            onLogin(user);
+        }
+    } catch (err: any) {
+        console.error("Login error:", err);
+        // Fallback for Demo Accounts (Constants) if Supabase fails or user is not in DB
+        const demoUser = team.find(m => m.email.toLowerCase() === loginForm.email.toLowerCase()) 
+                         || (loginForm.email.toLowerCase() === systemAdmin.email.toLowerCase() ? systemAdmin : undefined);
+        
+        if (demoUser && loginForm.password === 'password') {
+            onLogin(demoUser);
+        } else {
+            setError(err.message || 'Invalid credentials');
+        }
+    } finally {
         setIsLoading(false);
-      }
-    }, 800);
+    }
   };
 
-  const handleSignUpSubmit = (e: React.FormEvent) => {
+  const handleSignUpSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       setError('');
 
-      // Basic Validation
       if (signUpForm.password !== signUpForm.confirmPassword) {
           setError('Passwords do not match');
           return;
@@ -69,17 +90,33 @@ const Login: React.FC<LoginProps> = ({ onLogin, team, systemAdmin }) => {
 
       setIsLoading(true);
 
-      // Simulate Registration API Call
-      setTimeout(() => {
-          setIsLoading(false);
+      try {
+          const { data, error: signUpError } = await supabase.auth.signUp({
+              email: signUpForm.email,
+              password: signUpForm.password,
+              options: {
+                  data: {
+                      full_name: signUpForm.fullName,
+                      clinic_name: signUpForm.clinicName,
+                      role: 'Admin' // Default role for new signups
+                  }
+              }
+          });
+
+          if (signUpError) throw signUpError;
+
           setIsPendingApproval(true);
-      }, 1500);
+      } catch (err: any) {
+          setError(err.message);
+      } finally {
+          setIsLoading(false);
+      }
   };
 
   const handleDemoLogin = (user: TeamMember) => {
       setLoginForm({ email: user.email, password: 'password' });
       setIsSignUp(false);
-      setTimeout(() => onLogin(user), 500);
+      // Auto submit handled by state change if we added useEffect, but manual click for now is fine
   };
 
   return (
@@ -88,7 +125,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, team, systemAdmin }) => {
         
         {/* LEFT SIDE - Brand & Visual */}
         <div className="lg:w-1/2 bg-brand-dark relative overflow-hidden flex flex-col justify-center items-center p-12 text-white">
-            {/* Background Abstract Shapes */}
             <div className="absolute top-0 left-0 w-full h-full opacity-30 pointer-events-none">
                 <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-brand-blue rounded-full blur-[160px] opacity-40"></div>
                 <div className="absolute bottom-[10%] right-[-10%] w-[400px] h-[400px] bg-brand-teal rounded-full blur-[128px] opacity-30"></div>
@@ -97,25 +133,21 @@ const Login: React.FC<LoginProps> = ({ onLogin, team, systemAdmin }) => {
             <div className="relative z-10 text-center mb-16">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-white/5 backdrop-blur-md mb-6">
                     <span className="w-2 h-2 rounded-full bg-brand-yellow"></span>
-                    <span className="text-[10px] font-bold tracking-widest uppercase text-brand-yellow">Operations OS</span>
+                    <span className="text-[10px] font-bold tracking-widest uppercase text-brand-yellow">Enterprise Edition</span>
                 </div>
                 <h1 className="text-5xl md:text-6xl font-bold leading-[1.1] mb-6 tracking-tight">
                     Manage your <br/>
                     <span className="text-brand-blue">clinic growth.</span>
                 </h1>
                 <p className="text-slate-400 text-lg max-w-md mx-auto leading-relaxed">
-                    Streamline patient care, inventory, and payments with JuaAfya's all-in-one platform.
+                    Secure, scalable, and simple. Powered by Supabase.
                 </p>
             </div>
 
             {/* CSS Phone Mockup */}
             <div className="relative z-10 w-[320px] h-[600px] bg-brand-dark rounded-[3rem] border-[8px] border-[#252b3b] shadow-2xl rotate-[-8deg] translate-y-16 hover:rotate-0 transition-transform duration-700 ease-out hidden md:block">
-                {/* Notch */}
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 h-7 w-36 bg-[#252b3b] rounded-b-2xl z-20"></div>
-                
-                {/* Screen Content */}
                 <div className="w-full h-full bg-brand-dark rounded-[2.5rem] overflow-hidden flex flex-col pt-12 px-5 pb-6">
-                    {/* Mock App Header */}
                     <div className="flex justify-between items-center mb-8">
                         <div className="flex flex-col">
                             <span className="text-xs text-slate-400 font-medium">Total Revenue</span>
@@ -125,15 +157,11 @@ const Login: React.FC<LoginProps> = ({ onLogin, team, systemAdmin }) => {
                             <Activity className="w-5 h-5 text-brand-blue" />
                         </div>
                     </div>
-
-                    {/* Mock Chart */}
                     <div className="h-40 flex items-end justify-between gap-3 mb-8 px-1">
                         {[40, 65, 45, 80, 55, 90, 70].map((h, i) => (
                             <div key={i} className={`w-full rounded-t-lg opacity-90 ${i === 5 ? 'bg-brand-yellow' : 'bg-brand-blue'}`} style={{ height: `${h}%`, opacity: i === 5 ? 1 : 0.6 }}></div>
                         ))}
                     </div>
-
-                    {/* Mock Cards */}
                     <div className="grid grid-cols-2 gap-4 mb-6">
                         <div className="bg-[#1e2532] p-4 rounded-3xl border border-white/5">
                             <div className="text-xs text-slate-400 mb-2 font-medium">Patients</div>
@@ -149,16 +177,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, team, systemAdmin }) => {
                             </div>
                         </div>
                     </div>
-
-                    {/* Mock Bottom Menu */}
-                    <div className="mt-auto bg-[#1e2532] rounded-3xl p-3 flex justify-between px-8 items-center border border-white/5">
-                        <div className="w-10 h-10 rounded-full bg-transparent border-2 border-brand-yellow flex items-center justify-center">
-                            <div className="w-4 h-4 bg-brand-yellow rounded-full"></div>
-                        </div>
-                        <div className="w-2 h-2 rounded-full bg-slate-600"></div>
-                        <div className="w-2 h-2 rounded-full bg-slate-600"></div>
-                        <div className="w-6 h-6 rounded-lg bg-slate-600/50"></div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -172,15 +190,15 @@ const Login: React.FC<LoginProps> = ({ onLogin, team, systemAdmin }) => {
                         <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-6 shadow-lg shadow-green-200 dark:shadow-none">
                             <CheckCircle className="w-10 h-10 text-green-600 dark:text-green-400" />
                         </div>
-                        <h2 className="text-3xl font-bold text-brand-dark dark:text-white mb-4">Registration Received</h2>
+                        <h2 className="text-3xl font-bold text-brand-dark dark:text-white mb-4">Check Your Email</h2>
                         <div className="p-6 bg-slate-50 dark:bg-[#121721] rounded-3xl border border-slate-100 dark:border-slate-800 mb-8 w-full">
                             <p className="text-slate-600 dark:text-slate-300 mb-4 leading-relaxed text-sm">
-                                Your account for <span className="font-bold text-brand-dark dark:text-white">{signUpForm.clinicName}</span> has been created successfully.
+                                We've sent a confirmation link to <span className="font-bold text-brand-dark dark:text-white">{signUpForm.email}</span>.
                             </p>
                             <div className="flex items-start gap-3 text-left bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl">
                                 <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
                                 <p className="text-xs text-blue-700 dark:text-blue-300">
-                                    Access is currently pending administrator approval. You will receive a confirmation email at <strong>{signUpForm.email}</strong> once your account is active.
+                                    Please verify your email to access your JuaAfya account.
                                 </p>
                             </div>
                         </div>
@@ -193,23 +211,9 @@ const Login: React.FC<LoginProps> = ({ onLogin, team, systemAdmin }) => {
                     </div>
                 ) : (
                     <>
-                        {/* Brand Logo Mobile */}
-                        <div className="flex items-center gap-2 mb-8 lg:hidden">
-                            <div className="w-8 h-8 flex items-center justify-center">
-                                {/* Mobile Logo */}
-                                <svg viewBox="0 0 24 24" fill="none" className="w-full h-full">
-                                    <path d="M12 2V4M12 20V22M4.93 4.93L6.34 6.34M17.66 17.66L19.07 19.07M2 12H4M20 12H22M6.34 17.66L4.93 19.07M19.07 4.93L17.66 6.34" stroke="#EFE347" strokeWidth="2.5" strokeLinecap="round" />
-                                    <circle cx="12" cy="12" r="6" fill="#3462EE" />
-                                    <path d="M12 9V15M9 12H15" stroke="white" strokeWidth="2" strokeLinecap="round" />
-                                </svg>
-                            </div>
-                            <span className="text-xl font-bold text-brand-dark dark:text-white tracking-tight">JuaAfya</span>
-                        </div>
-
                         <div className="flex justify-between items-center mb-8">
                             <div className="flex items-center gap-3 hidden lg:flex">
                                 <div className="w-10 h-10 flex items-center justify-center">
-                                    {/* Desktop Logo */}
                                     <svg viewBox="0 0 24 24" fill="none" className="w-full h-full">
                                         <path d="M12 2V4M12 20V22M4.93 4.93L6.34 6.34M17.66 17.66L19.07 19.07M2 12H4M20 12H22M6.34 17.66L4.93 19.07M19.07 4.93L17.66 6.34" stroke="#EFE347" strokeWidth="2.5" strokeLinecap="round" />
                                         <circle cx="12" cy="12" r="6" fill="#3462EE" />
@@ -219,7 +223,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, team, systemAdmin }) => {
                                 <span className="text-2xl font-bold text-brand-dark dark:text-white tracking-tight">JuaAfya</span>
                             </div>
                             
-                            {/* Toggle Login/Signup */}
                             <button 
                                 onClick={() => { setIsSignUp(!isSignUp); setError(''); }}
                                 className="flex items-center gap-2 text-sm font-medium group"
@@ -241,7 +244,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, team, systemAdmin }) => {
                         </div>
 
                         {isSignUp ? (
-                            // SIGN UP FORM
                             <form onSubmit={handleSignUpSubmit} className="space-y-5 animate-in fade-in slide-in-from-right-8 duration-500">
                                 <div className="space-y-2">
                                     <div className="relative group">
@@ -296,13 +298,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, team, systemAdmin }) => {
                                             onChange={(e) => setSignUpForm({...signUpForm, password: e.target.value})}
                                             required
                                         />
-                                        <button 
-                                            type="button"
-                                            onClick={() => setShowPassword(!showPassword)}
-                                            className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-blue transition-colors"
-                                        >
-                                            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                                        </button>
                                     </div>
                                 </div>
 
@@ -321,8 +316,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, team, systemAdmin }) => {
                                 </div>
 
                                 {error && (
-                                    <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-2xl font-medium text-center border border-red-100 dark:border-red-900">
-                                        {error}
+                                    <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-2xl font-medium text-center border border-red-100 dark:border-red-900 flex items-center justify-center gap-2">
+                                        <AlertCircle className="w-4 h-4"/> {error}
                                     </div>
                                 )}
 
@@ -341,7 +336,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, team, systemAdmin }) => {
                                 </button>
                             </form>
                         ) : (
-                            // LOGIN FORM
                             <form onSubmit={handleLoginSubmit} className="space-y-6 animate-in fade-in slide-in-from-left-8 duration-500">
                                 <div className="space-y-2">
                                     <div className="relative group">
@@ -383,8 +377,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, team, systemAdmin }) => {
                                 </div>
 
                                 {error && (
-                                    <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-2xl font-medium text-center border border-red-100 dark:border-red-900">
-                                        {error}
+                                    <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-2xl font-medium text-center border border-red-100 dark:border-red-900 flex items-center justify-center gap-2">
+                                        <AlertCircle className="w-4 h-4"/> {error}
                                     </div>
                                 )}
 
@@ -404,7 +398,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, team, systemAdmin }) => {
                             </form>
                         )}
 
-                        {/* Footer Info */}
                         <div className="mt-16 pt-6 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center text-xs font-medium text-slate-400">
                             <div>© 2023-2025 JuaAfya Inc.</div>
                             <div className="flex gap-6">
@@ -418,6 +411,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, team, systemAdmin }) => {
                         {/* Demo Accounts - Only visible in Login Mode */}
                         {!isSignUp && (
                             <div className="mt-6 flex flex-wrap justify-center gap-2 opacity-60 hover:opacity-100 transition-opacity">
+                                <p className="w-full text-center text-xs text-slate-400 mb-1">Quick Demo Access (Fallback)</p>
                                 {[
                                     { label: 'Doctor', user: team.find(t => t.role === 'Doctor') },
                                     { label: 'Reception', user: team.find(t => t.role === 'Receptionist') },

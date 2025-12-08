@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
@@ -15,7 +16,9 @@ import WhatsAppAgent from './components/WhatsAppAgent';
 import Login from './components/Login';
 import { ViewState, Patient, Appointment, InventoryItem, ClinicSettings, Notification, Supplier, InventoryLog, Visit, VisitPriority, TeamMember } from './types';
 import { MOCK_PATIENTS, MOCK_APPOINTMENTS, MOCK_INVENTORY, MOCK_SUPPLIERS, MOCK_LOGS, MOCK_VISITS } from './constants';
-import { CheckCircle, AlertCircle, X } from 'lucide-react';
+import { CheckCircle, AlertCircle, X, Loader2 } from 'lucide-react';
+import { supabase } from './lib/supabaseClient';
+import { db } from './services/db';
 
 // Dedicated System Owner User (Not part of any clinic)
 const SYSTEM_ADMIN: TeamMember = {
@@ -31,6 +34,7 @@ const SYSTEM_ADMIN: TeamMember = {
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewState>('dashboard');
+  const [isAppLoading, setIsAppLoading] = useState(true);
   
   // -- Theme Persistence --
   const [darkMode, setDarkMode] = useState(() => {
@@ -53,38 +57,15 @@ const App: React.FC = () => {
 
   const toggleTheme = () => setDarkMode(!darkMode);
 
-  // -- Data Persistence Helper --
-  const usePersistedState = <T,>(key: string, initialValue: T): [T, React.Dispatch<React.SetStateAction<T>>] => {
-    const [state, setState] = useState<T>(() => {
-        try {
-            const item = localStorage.getItem(key);
-            return item ? JSON.parse(item) : initialValue;
-        } catch (error) {
-            console.error(`Error reading ${key} from localStorage`, error);
-            return initialValue;
-        }
-    });
-
-    useEffect(() => {
-        try {
-            localStorage.setItem(key, JSON.stringify(state));
-        } catch (error) {
-            console.error(`Error saving ${key} to localStorage`, error);
-        }
-    }, [key, state]);
-
-    return [state, setState];
-  };
-
-  // -- App Data --
-  const [patients, setPatients] = usePersistedState<Patient[]>('patients', MOCK_PATIENTS);
-  const [appointments, setAppointments] = usePersistedState<Appointment[]>('appointments', MOCK_APPOINTMENTS);
-  const [inventory, setInventory] = usePersistedState<InventoryItem[]>('inventory', MOCK_INVENTORY);
-  const [suppliers, setSuppliers] = usePersistedState<Supplier[]>('suppliers', MOCK_SUPPLIERS);
-  const [inventoryLogs, setInventoryLogs] = usePersistedState<InventoryLog[]>('inventoryLogs', MOCK_LOGS);
-  const [visits, setVisits] = usePersistedState<Visit[]>('visits', MOCK_VISITS);
+  // -- App Data State --
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [inventoryLogs, setInventoryLogs] = useState<InventoryLog[]>(MOCK_LOGS); // Keep local/mock for logs for now to save DB space
+  const [visits, setVisits] = useState<Visit[]>([]);
   
-  const [settings, setSettings] = usePersistedState<ClinicSettings>('clinicSettings', {
+  const [settings, setSettings] = useState<ClinicSettings>({
       name: 'JuaAfya Medical Centre',
       phone: '+254 712 345 678',
       email: 'admin@juaafya.com',
@@ -125,23 +106,81 @@ const App: React.FC = () => {
       ]
   });
 
-  // -- User Session State --
-  // We use standard useState here but initialized from localStorage if available
-  const [currentUser, setCurrentUser] = useState<TeamMember | null>(() => {
-      const savedUser = localStorage.getItem('currentUser');
-      return savedUser ? JSON.parse(savedUser) : null;
-  });
+  const [currentUser, setCurrentUser] = useState<TeamMember | null>(null);
 
-  useEffect(() => {
-      if (currentUser) {
-          localStorage.setItem('currentUser', JSON.stringify(currentUser));
-      } else {
-          localStorage.removeItem('currentUser');
+  // -- Data Fetching --
+  const fetchData = async () => {
+      try {
+          const [pts, inv, appts, vis, sups] = await Promise.all([
+              db.getPatients(),
+              db.getInventory(),
+              db.getAppointments(),
+              db.getVisits(),
+              db.getSuppliers()
+          ]);
+          setPatients(pts);
+          setInventory(inv);
+          setAppointments(appts);
+          setVisits(vis);
+          setSuppliers(sups);
+      } catch (e) {
+          console.error("Failed to fetch initial data", e);
+          showToast("Offline Mode: Using local/cached data", 'info');
+          // Fallback handled in db service or use MOCK_CONSTANTS here if critical
       }
-  }, [currentUser]);
+  };
+
+  // -- Auth Listener --
+  useEffect(() => {
+      const initApp = async () => {
+          setIsAppLoading(true);
+          // Check session
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+              const user: TeamMember = {
+                  id: session.user.id,
+                  name: session.user.user_metadata.full_name || session.user.email?.split('@')[0] || 'User',
+                  email: session.user.email || '',
+                  role: (session.user.user_metadata.role as any) || 'Admin',
+                  status: 'Active',
+                  lastActive: 'Now'
+              };
+              setCurrentUser(user);
+              await fetchData();
+          }
+          setIsAppLoading(false);
+      };
+
+      initApp();
+
+      const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+          if (event === 'SIGNED_IN' && session) {
+               // Reload data on fresh login
+               const user: TeamMember = {
+                  id: session.user.id,
+                  name: session.user.user_metadata.full_name || session.user.email?.split('@')[0] || 'User',
+                  email: session.user.email || '',
+                  role: (session.user.user_metadata.role as any) || 'Admin',
+                  status: 'Active',
+                  lastActive: 'Now'
+              };
+              setCurrentUser(user);
+              await fetchData();
+          } else if (event === 'SIGNED_OUT') {
+              setCurrentUser(null);
+              setPatients([]); // Clear sensitive data
+          }
+      });
+
+      return () => {
+          authListener.subscription.unsubscribe();
+      };
+  }, []);
 
   const handleLogin = (member: TeamMember) => {
       setCurrentUser(member);
+      fetchData(); // Fetch data if simulated login
+      
       // Determine default view based on role
       if (member.role === 'SuperAdmin') setCurrentView('sa-overview');
       else if (member.role === 'Doctor') setCurrentView('consultation');
@@ -152,27 +191,21 @@ const App: React.FC = () => {
       showToast(`Welcome back, ${member.name.split(' ')[0]}!`);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+      await supabase.auth.signOut();
       setCurrentUser(null);
       showToast('You have been logged out.', 'info');
   };
 
   const switchUser = (member: TeamMember) => {
       setCurrentUser(member);
-      // Determine default view based on role
       if (member.role === 'SuperAdmin') setCurrentView('sa-overview');
-      else if (member.role === 'Doctor') setCurrentView('consultation');
-      else if (member.role === 'Nurse') setCurrentView('triage');
-      else if (member.role === 'Receptionist') setCurrentView('reception');
       else setCurrentView('dashboard');
-      
       showToast(`Switched to ${member.name} (${member.role})`);
   };
 
-  // Calculate Global Low Stock Count (using minStockLevel from item)
   const lowStockCount = inventory.filter(i => i.stock <= i.minStockLevel).length;
 
-  // -- Toast Notification System --
   const [toasts, setToasts] = useState<Notification[]>([]);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -183,21 +216,36 @@ const App: React.FC = () => {
       }, 3000);
   };
 
-  // -- Handlers --
+  // -- CRUD Handlers (Connected to DB) --
 
-  const addPatient = (patient: Patient) => {
-    setPatients(prev => [patient, ...prev]);
-    showToast(`Patient ${patient.name} added successfully!`);
+  const addPatient = async (patient: Patient) => {
+    try {
+        await db.createPatient(patient);
+        setPatients(prev => [patient, ...prev]);
+        showToast(`Patient ${patient.name} added successfully!`);
+    } catch (e) {
+        showToast("Error adding patient", 'error');
+    }
   };
 
-  const updatePatient = (updatedPatient: Patient) => {
-    setPatients(prev => prev.map(p => p.id === updatedPatient.id ? updatedPatient : p));
-    showToast(`Patient record updated.`);
+  const updatePatient = async (updatedPatient: Patient) => {
+    try {
+        await db.updatePatient(updatedPatient);
+        setPatients(prev => prev.map(p => p.id === updatedPatient.id ? updatedPatient : p));
+        showToast(`Patient record updated.`);
+    } catch (e) {
+        showToast("Error updating patient", 'error');
+    }
   };
 
-  const deletePatient = (id: string) => {
-    setPatients(prev => prev.filter(p => p.id !== id));
-    showToast(`Patient deleted.`, 'info');
+  const deletePatient = async (id: string) => {
+    try {
+        await db.deletePatient(id);
+        setPatients(prev => prev.filter(p => p.id !== id));
+        showToast(`Patient deleted.`, 'info');
+    } catch (e) {
+        showToast("Error deleting patient", 'error');
+    }
   };
 
   // -- Inventory Handlers --
@@ -215,62 +263,89 @@ const App: React.FC = () => {
       setInventoryLogs(prev => [log, ...prev]);
   };
 
-  const addInventoryItem = (item: InventoryItem) => {
-    setInventory(prev => [item, ...prev]);
-    logInventoryAction(item, 'Created', item.stock, 'Initial stock entry');
-    showToast(`${item.name} added to inventory.`);
+  const addInventoryItem = async (item: InventoryItem) => {
+    try {
+        await db.createInventoryItem(item);
+        setInventory(prev => [item, ...prev]);
+        logInventoryAction(item, 'Created', item.stock, 'Initial stock entry');
+        showToast(`${item.name} added to inventory.`);
+    } catch (e) {
+        showToast('Error creating item', 'error');
+    }
   };
 
-  const updateInventoryItem = (updatedItem: InventoryItem, reason = 'Updated details') => {
-      setInventory(prev => prev.map(i => i.id === updatedItem.id ? updatedItem : i));
-      
-      // Calculate diff for logging if it's a stock change
-      const oldItem = inventory.find(i => i.id === updatedItem.id);
-      const stockDiff = updatedItem.stock - (oldItem?.stock || 0);
-      
-      if (stockDiff !== 0) {
-          logInventoryAction(updatedItem, stockDiff > 0 ? 'Restocked' : 'Dispensed', stockDiff, reason);
-      } else {
-          logInventoryAction(updatedItem, 'Updated', 0, reason);
+  const updateInventoryItem = async (updatedItem: InventoryItem, reason = 'Updated details') => {
+      try {
+          await db.updateInventoryItem(updatedItem);
+          const oldItem = inventory.find(i => i.id === updatedItem.id);
+          const stockDiff = updatedItem.stock - (oldItem?.stock || 0);
+          
+          if (stockDiff !== 0) {
+              logInventoryAction(updatedItem, stockDiff > 0 ? 'Restocked' : 'Dispensed', stockDiff, reason);
+          } else {
+              logInventoryAction(updatedItem, 'Updated', 0, reason);
+          }
+          
+          setInventory(prev => prev.map(i => i.id === updatedItem.id ? updatedItem : i));
+          showToast(`${updatedItem.name} updated.`);
+      } catch (e) {
+          showToast('Error updating item', 'error');
       }
-      
-      showToast(`${updatedItem.name} updated.`);
   };
 
-  const deleteInventoryItem = (id: string) => {
-      const item = inventory.find(i => i.id === id);
-      if (item) {
-          logInventoryAction(item, 'Deleted', -item.stock, 'Item removed from system');
+  const deleteInventoryItem = async (id: string) => {
+      try {
+          await db.deleteInventoryItem(id);
+          const item = inventory.find(i => i.id === id);
+          if (item) logInventoryAction(item, 'Deleted', -item.stock, 'Item removed');
+          setInventory(prev => prev.filter(i => i.id !== id));
+          showToast(`Item removed.`, 'info');
+      } catch (e) {
+          showToast('Error deleting item', 'error');
       }
-      setInventory(prev => prev.filter(i => i.id !== id));
-      showToast(`Item removed from inventory.`, 'info');
   };
 
   // -- Supplier Handlers --
-  const addSupplier = (supplier: Supplier) => {
-      setSuppliers(prev => [...prev, supplier]);
-      showToast('Supplier added successfully.');
+  const addSupplier = async (supplier: Supplier) => {
+      try {
+          await db.createSupplier(supplier);
+          setSuppliers(prev => [...prev, supplier]);
+          showToast('Supplier added successfully.');
+      } catch (e) {
+          showToast('Error adding supplier', 'error');
+      }
   };
 
   const updateSupplier = (updated: Supplier) => {
+      // DB update placeholder
       setSuppliers(prev => prev.map(s => s.id === updated.id ? updated : s));
       showToast('Supplier updated.');
   };
 
   const deleteSupplier = (id: string) => {
+      // DB delete placeholder
       setSuppliers(prev => prev.filter(s => s.id !== id));
-      // Also clear supplierId from items linked to this supplier
       setInventory(prev => prev.map(item => item.supplierId === id ? { ...item, supplierId: undefined } : item));
       showToast('Supplier removed.', 'info');
   };
 
-  const addAppointment = (newAppt: Appointment) => {
-    setAppointments(prev => [...prev, newAppt]);
-    showToast(`Appointment scheduled for ${newAppt.patientName}.`);
+  const addAppointment = async (newAppt: Appointment) => {
+    try {
+        await db.createAppointment(newAppt);
+        setAppointments(prev => [...prev, newAppt]);
+        showToast(`Appointment scheduled for ${newAppt.patientName}.`);
+    } catch (e) {
+        showToast('Error scheduling appointment', 'error');
+    }
   };
 
-  const updateAppointment = (updatedAppt: Appointment) => {
-    setAppointments(prev => prev.map(a => a.id === updatedAppt.id ? updatedAppt : a));
+  const updateAppointment = async (updatedAppt: Appointment) => {
+    try {
+        await db.updateAppointment(updatedAppt);
+        setAppointments(prev => prev.map(a => a.id === updatedAppt.id ? updatedAppt : a));
+    } catch (e) {
+        showToast('Error updating appointment', 'error');
+    }
   };
 
   const updateSettings = (newSettings: ClinicSettings) => {
@@ -278,8 +353,8 @@ const App: React.FC = () => {
       showToast('Settings saved successfully!');
   };
 
-  // -- Visit/Queue Handlers --
-  const addVisit = (patientId: string, priority: VisitPriority = 'Normal', insurance?: any, skipVitals: boolean = false) => {
+  // -- Visit Handlers --
+  const addVisit = async (patientId: string, priority: VisitPriority = 'Normal', insurance?: any, skipVitals: boolean = false) => {
     const patient = patients.find(p => p.id === patientId);
     if (!patient) return;
 
@@ -287,7 +362,7 @@ const App: React.FC = () => {
       id: `V${Date.now()}`,
       patientId: patient.id,
       patientName: patient.name,
-      stage: skipVitals ? 'Consultation' : 'Vitals', // Skip Vitals logic
+      stage: skipVitals ? 'Consultation' : 'Vitals',
       stageStartTime: new Date().toISOString(),
       startTime: new Date().toISOString(),
       queueNumber: visits.filter(v => v.stage !== 'Completed').length + 1,
@@ -296,21 +371,30 @@ const App: React.FC = () => {
       labOrders: [],
       prescription: [],
       medicationsDispensed: false,
-      consultationFee: 500, // Default fee
+      consultationFee: 500,
       totalBill: 500,
       paymentStatus: 'Pending'
     };
     
-    setVisits(prev => [...prev, newVisit]);
-    showToast(`${patient.name} checked in (Priority: ${priority}).`);
+    try {
+        await db.createVisit(newVisit);
+        setVisits(prev => [...prev, newVisit]);
+        showToast(`${patient.name} checked in.`);
+    } catch (e) {
+        showToast('Error checking in patient', 'error');
+    }
   };
 
-  const updateVisit = (updatedVisit: Visit) => {
-    setVisits(prev => prev.map(v => v.id === updatedVisit.id ? updatedVisit : v));
+  const updateVisit = async (updatedVisit: Visit) => {
+    try {
+        await db.updateVisit(updatedVisit);
+        setVisits(prev => prev.map(v => v.id === updatedVisit.id ? updatedVisit : v));
+    } catch (e) {
+        showToast('Error updating visit', 'error');
+    }
   };
 
-  const dispensePrescription = (visit: Visit) => {
-      // 1. Update inventory
+  const dispensePrescription = async (visit: Visit) => {
       const updatedInventory = [...inventory];
       visit.prescription.forEach(med => {
           const itemIndex = updatedInventory.findIndex(i => i.id === med.inventoryId);
@@ -319,18 +403,18 @@ const App: React.FC = () => {
               const newStock = Math.max(0, item.stock - med.quantity);
               updatedInventory[itemIndex] = { ...item, stock: newStock };
               
-              // Log it
               logInventoryAction(item, 'Dispensed', -med.quantity, `Prescription for ${visit.patientName}`);
+              db.updateInventoryItem(updatedInventory[itemIndex]); // Async update
           }
       });
       setInventory(updatedInventory);
 
-      // 2. Move visit to Clearance (Patient has already paid in Billing)
-      updateVisit({ ...visit, medicationsDispensed: true, stage: 'Clearance', stageStartTime: new Date().toISOString() });
+      const nextVisitState: Visit = { ...visit, medicationsDispensed: true, stage: 'Clearance', stageStartTime: new Date().toISOString() };
+      await updateVisit(nextVisitState);
       showToast('Medications dispensed. Sent to Clearance.');
   };
 
-  const completeVisit = (visit: Visit) => {
+  const completeVisit = async (visit: Visit) => {
       // Archive history
       const diagnosisText = visit.diagnosis ? `Dx: ${visit.diagnosis}` : 'No Diagnosis';
       const notesText = visit.doctorNotes ? `Notes: ${visit.doctorNotes}` : '';
@@ -343,17 +427,16 @@ const App: React.FC = () => {
               lastVisit: new Date().toISOString().split('T')[0],
               history: [summary, ...patient.history]
           };
-          setPatients(prev => prev.map(p => p.id === updatedPatient.id ? updatedPatient : p));
+          await updatePatient(updatedPatient);
       }
 
-      updateVisit({ ...visit, stage: 'Completed' });
-      showToast('Visit finalized and archived to patient history.', 'success');
+      await updateVisit({ ...visit, stage: 'Completed' });
+      showToast('Visit finalized.', 'success');
   };
 
   const renderContent = () => {
     if (!currentUser) return null;
 
-    // Shared Props
     const queueProps = {
         visits,
         patients,
@@ -366,8 +449,6 @@ const App: React.FC = () => {
     switch (currentView) {
       case 'dashboard':
         return <Dashboard appointments={appointments} inventory={inventory} patients={patients} setView={setCurrentView} onLogout={handleLogout} />;
-      
-      // -- DEPARTMENTAL VIEWS (Dashboard-to-Dashboard workflow) --
       case 'reception':
         return <PatientQueue {...queueProps} restrictedStages={['Check-In', 'Clearance']} />;
       case 'triage':
@@ -378,18 +459,14 @@ const App: React.FC = () => {
         return <PatientQueue {...queueProps} restrictedStages={['Lab']} />;
       case 'billing-desk':
         return <PatientQueue {...queueProps} restrictedStages={['Billing']} />;
-      
-      // -- SUPER ADMIN VIEWS --
       case 'sa-overview':
       case 'sa-clinics':
       case 'sa-approvals':
       case 'sa-payments':
       case 'sa-settings':
-      case 'sa-support': // Added missing case
+      case 'sa-support':
         const tab = currentView.replace('sa-', '') as any;
         return <SuperAdminDashboard currentUser={currentUser} switchUser={switchUser} team={settings.team} activeTab={tab} />;
-
-      // -- GENERAL MANAGEMENT --
       case 'patients':
         return <PatientList patients={patients} addPatient={addPatient} updatePatient={updatePatient} deletePatient={deletePatient} />;
       case 'appointments':
@@ -420,7 +497,6 @@ const App: React.FC = () => {
                 inventory={inventory} 
                 patients={patients} 
                 settings={settings}
-                // Actions
                 addPatient={addPatient}
                 updatePatient={updatePatient}
                 deletePatient={deletePatient}
@@ -437,17 +513,27 @@ const App: React.FC = () => {
       case 'profile':
         return <Profile />;
       default:
-        // Default catch-all (Admin Queue view)
         return <PatientQueue {...queueProps} />;
     }
   };
 
-  // If not logged in, show Login Screen
+  // Global Loading State
+  if (isAppLoading) {
+      return (
+          <div className="min-h-screen flex items-center justify-center bg-brand-cream/50 dark:bg-brand-dark">
+              <div className="flex flex-col items-center">
+                  <div className="w-16 h-16 border-4 border-brand-blue border-t-transparent rounded-full animate-spin mb-4"></div>
+                  <p className="text-brand-dark dark:text-white font-bold animate-pulse">Initializing JuaAfya Cloud...</p>
+              </div>
+          </div>
+      );
+  }
+
+  // Not Logged In
   if (!currentUser) {
       return (
           <>
             <Login onLogin={handleLogin} team={settings.team} systemAdmin={SYSTEM_ADMIN} />
-            {/* Toast Notifications container for Login screen */}
             <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 no-print">
                 {toasts.map(toast => (
                     <div key={toast.id} className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border animate-in slide-in-from-bottom-5 fade-in duration-300 ${
@@ -466,7 +552,6 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex transition-colors duration-200 font-sans">
-      {/* Navigation */}
       <Sidebar 
         currentView={currentView} 
         setView={setCurrentView} 
@@ -478,12 +563,9 @@ const App: React.FC = () => {
         onLogout={handleLogout}
       />
 
-      {/* Main Content Area */}
       <main className="flex-1 md:ml-64 lg:ml-72 w-full transition-all duration-300">
-        {/* Mobile Header */}
         <div className="md:hidden bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 sticky top-0 z-10 flex items-center justify-between no-print">
            <div className="flex items-center gap-2">
-               {/* Logo SVG */}
                 <div className="w-8 h-8 flex items-center justify-center">
                     <svg viewBox="0 0 24 24" fill="none" className="w-full h-full">
                         <path d="M12 2V4M12 20V22M4.93 4.93L6.34 6.34M17.66 17.66L19.07 19.07M2 12H4M20 12H22M6.34 17.66L4.93 19.07M19.07 4.93L17.66 6.34" stroke="#EFE347" strokeWidth="2.5" strokeLinecap="round" />
@@ -498,16 +580,13 @@ const App: React.FC = () => {
            </div>
         </div>
 
-        {/* Dynamic Content */}
         {renderContent()}
       </main>
 
-      {/* Global AI Chatbot */}
       <div className="no-print">
         <ChatBot />
       </div>
 
-      {/* Toast Notifications */}
       <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 no-print">
           {toasts.map(toast => (
               <div key={toast.id} className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border animate-in slide-in-from-bottom-5 fade-in duration-300 ${

@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Patient, Gender } from '../types';
-import { Search, Plus, Phone, FileText, Sparkles, X, Activity, MessageSquare, MoreHorizontal, Printer, Filter, Edit2, Save, User, Trash2, Send, Loader2, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Plus, Phone, FileText, Sparkles, X, Activity, MessageSquare, MoreHorizontal, Printer, Filter, Edit2, Save, User, Trash2, Send, Loader2, Eye, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { analyzePatientNotes, draftAppointmentSms } from '../services/geminiService';
 import { sendSms } from '../services/smsService';
 
@@ -37,6 +37,10 @@ const PatientList: React.FC<PatientListProps> = ({ patients, addPatient, updateP
   // Edit State
   const [isEditing, setIsEditing] = useState(false);
   const [editFormData, setEditFormData] = useState<Patient | null>(null);
+
+  // Vitals Inline Edit State
+  const [isEditingVitals, setIsEditingVitals] = useState(false);
+  const [tempVitals, setTempVitals] = useState({ bp: '', heartRate: '', temp: '', weight: '' });
 
   // History State
   const [isAddingHistory, setIsAddingHistory] = useState(false);
@@ -234,7 +238,7 @@ const PatientList: React.FC<PatientListProps> = ({ patients, addPatient, updateP
 
   const renderPatientDetail = (patient: Patient) => (
     <div className="fixed inset-0 z-50 flex justify-center items-center p-4 sm:p-6 no-print">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" onClick={() => setSelectedPatient(null)} />
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" onClick={() => { setSelectedPatient(null); setIsEditingVitals(false); }} />
       
       <div className="bg-white dark:bg-slate-800 w-full max-w-4xl max-h-[90vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col relative animate-in zoom-in-95 duration-200">
         
@@ -266,7 +270,7 @@ const PatientList: React.FC<PatientListProps> = ({ patients, addPatient, updateP
                 >
                     <Edit2 className="w-5 h-5" />
                 </button>
-                <button onClick={() => { setSelectedPatient(null); setAiAnalysis(null); }} className="p-2 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-full transition-colors">
+                <button onClick={() => { setSelectedPatient(null); setAiAnalysis(null); setIsEditingVitals(false); }} className="p-2 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-full transition-colors">
                     <X className="w-6 h-6 text-slate-400" />
                 </button>
             </div>
@@ -426,24 +430,108 @@ const PatientList: React.FC<PatientListProps> = ({ patients, addPatient, updateP
                     <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
                         <div className="flex justify-between items-center mb-4">
                             <h4 className="text-xs font-bold text-slate-400 uppercase">Vitals (Latest)</h4>
-                            <button onClick={() => handleEditClick(patient)} className="text-xs text-teal-600 dark:text-teal-400 hover:underline">Update</button>
+                            {!isEditingVitals ? (
+                                <button 
+                                    onClick={() => {
+                                        setTempVitals({
+                                            bp: patient.vitals?.bp || '',
+                                            heartRate: patient.vitals?.heartRate || '',
+                                            temp: patient.vitals?.temp || '',
+                                            weight: patient.vitals?.weight || ''
+                                        });
+                                        setIsEditingVitals(true);
+                                    }} 
+                                    className="text-xs text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1 font-bold"
+                                >
+                                    <Edit2 className="w-3 h-3" /> Edit
+                                </button>
+                            ) : (
+                                <div className="flex gap-2">
+                                    <button 
+                                        onClick={() => setIsEditingVitals(false)}
+                                        className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button 
+                                        onClick={() => {
+                                            const updated = { ...patient, vitals: tempVitals };
+                                            updatePatient(updated);
+                                            setSelectedPatient(updated);
+                                            setIsEditingVitals(false);
+                                        }}
+                                        className="text-xs text-teal-600 font-bold hover:text-teal-700 dark:hover:text-teal-300 flex items-center gap-1"
+                                    >
+                                        <Check className="w-3 h-3" /> Save
+                                    </button>
+                                </div>
+                            )}
                         </div>
+                        
                         <div className="space-y-4">
                              <div>
-                                 <div className="text-2xl font-bold text-slate-900 dark:text-white">{patient.vitals?.bp || '--/--'}</div>
-                                 <div className="text-xs text-slate-500 dark:text-slate-400">Blood Pressure</div>
+                                 <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">Blood Pressure</div>
+                                 {isEditingVitals ? (
+                                     <input 
+                                        value={tempVitals.bp}
+                                        onChange={(e) => setTempVitals({...tempVitals, bp: e.target.value})}
+                                        className="w-full text-lg font-bold p-1.5 border border-slate-200 dark:border-slate-600 rounded-lg dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-teal-500"
+                                        placeholder="120/80"
+                                     />
+                                 ) : (
+                                     <div className="text-2xl font-bold text-slate-900 dark:text-white">{patient.vitals?.bp || '--/--'}</div>
+                                 )}
                              </div>
+                             
                              <div>
-                                 <div className="text-2xl font-bold text-slate-900 dark:text-white">{patient.vitals?.heartRate || '--'} <span className="text-sm font-normal text-slate-400">bpm</span></div>
-                                 <div className="text-xs text-slate-500 dark:text-slate-400">Heart Rate</div>
+                                 <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">Heart Rate</div>
+                                 <div className="flex items-center gap-2">
+                                     {isEditingVitals ? (
+                                         <input 
+                                            value={tempVitals.heartRate}
+                                            onChange={(e) => setTempVitals({...tempVitals, heartRate: e.target.value})}
+                                            className="w-full text-lg font-bold p-1.5 border border-slate-200 dark:border-slate-600 rounded-lg dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-teal-500"
+                                            placeholder="72"
+                                         />
+                                     ) : (
+                                         <span className="text-2xl font-bold text-slate-900 dark:text-white">{patient.vitals?.heartRate || '--'}</span>
+                                     )}
+                                     <span className="text-sm font-normal text-slate-400">bpm</span>
+                                 </div>
                              </div>
+
                              <div>
-                                 <div className="text-2xl font-bold text-slate-900 dark:text-white">{patient.vitals?.temp || '--'} <span className="text-sm font-normal text-slate-400">°C</span></div>
-                                 <div className="text-xs text-slate-500 dark:text-slate-400">Temperature</div>
+                                 <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">Temperature</div>
+                                 <div className="flex items-center gap-2">
+                                     {isEditingVitals ? (
+                                         <input 
+                                            value={tempVitals.temp}
+                                            onChange={(e) => setTempVitals({...tempVitals, temp: e.target.value})}
+                                            className="w-full text-lg font-bold p-1.5 border border-slate-200 dark:border-slate-600 rounded-lg dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-teal-500"
+                                            placeholder="36.5"
+                                         />
+                                     ) : (
+                                         <span className="text-2xl font-bold text-slate-900 dark:text-white">{patient.vitals?.temp || '--'}</span>
+                                     )}
+                                     <span className="text-sm font-normal text-slate-400">°C</span>
+                                 </div>
                              </div>
+
                              <div>
-                                 <div className="text-2xl font-bold text-slate-900 dark:text-white">{patient.vitals?.weight || '--'} <span className="text-sm font-normal text-slate-400">kg</span></div>
-                                 <div className="text-xs text-slate-500 dark:text-slate-400">Weight</div>
+                                 <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">Weight</div>
+                                 <div className="flex items-center gap-2">
+                                     {isEditingVitals ? (
+                                         <input 
+                                            value={tempVitals.weight}
+                                            onChange={(e) => setTempVitals({...tempVitals, weight: e.target.value})}
+                                            className="w-full text-lg font-bold p-1.5 border border-slate-200 dark:border-slate-600 rounded-lg dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-teal-500"
+                                            placeholder="70"
+                                         />
+                                     ) : (
+                                         <span className="text-2xl font-bold text-slate-900 dark:text-white">{patient.vitals?.weight || '--'}</span>
+                                     )}
+                                     <span className="text-sm font-normal text-slate-400">kg</span>
+                                 </div>
                              </div>
                         </div>
                     </div>
