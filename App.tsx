@@ -134,7 +134,8 @@ const App: React.FC = () => {
   useEffect(() => {
       const initApp = async () => {
           setIsAppLoading(true);
-          // Check session
+          
+          // 1. Check Supabase Session
           const { data: { session } } = await supabase.auth.getSession();
           if (session) {
               const user: TeamMember = {
@@ -147,6 +148,17 @@ const App: React.FC = () => {
               };
               setCurrentUser(user);
               await fetchData();
+          } else {
+              // 2. Check Local Storage for Demo User
+              const storedUser = localStorage.getItem('juaafya_demo_user');
+              if (storedUser) {
+                  try {
+                      setCurrentUser(JSON.parse(storedUser));
+                      await fetchData();
+                  } catch (e) {
+                      localStorage.removeItem('juaafya_demo_user');
+                  }
+              }
           }
           setIsAppLoading(false);
       };
@@ -167,8 +179,9 @@ const App: React.FC = () => {
               setCurrentUser(user);
               await fetchData();
           } else if (event === 'SIGNED_OUT') {
-              setCurrentUser(null);
-              setPatients([]); // Clear sensitive data
+              // Only clear if we are not in persistent demo mode (though handleLogout covers this mostly)
+              // If signed out from Supabase, we should likely clear everything
+              // But manual logout triggers this.
           }
       });
 
@@ -179,6 +192,9 @@ const App: React.FC = () => {
 
   const handleLogin = (member: TeamMember) => {
       setCurrentUser(member);
+      // Persist demo user to avoid session loss on refresh
+      localStorage.setItem('juaafya_demo_user', JSON.stringify(member));
+      
       fetchData(); // Fetch data if simulated login
       
       // Determine default view based on role
@@ -193,12 +209,17 @@ const App: React.FC = () => {
 
   const handleLogout = async () => {
       await supabase.auth.signOut();
+      localStorage.removeItem('juaafya_demo_user');
       setCurrentUser(null);
+      setPatients([]); // Clear sensitive data
       showToast('You have been logged out.', 'info');
   };
 
   const switchUser = (member: TeamMember) => {
       setCurrentUser(member);
+      // Update persistent storage if switching demo users
+      localStorage.setItem('juaafya_demo_user', JSON.stringify(member));
+      
       if (member.role === 'SuperAdmin') setCurrentView('sa-overview');
       else setCurrentView('dashboard');
       showToast(`Switched to ${member.name} (${member.role})`);

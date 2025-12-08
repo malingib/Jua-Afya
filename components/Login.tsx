@@ -37,8 +37,29 @@ const Login: React.FC<LoginProps> = ({ onLogin, team, systemAdmin }) => {
     setError('');
     setIsLoading(true);
 
+    // 1. Check for Demo Account match FIRST to prioritize demo experience
+    // This prevents API errors if the backend is unreachable or user is strictly a demo user
+    const demoUser = team.find(m => m.email.toLowerCase() === loginForm.email.toLowerCase()) 
+                     || (loginForm.email.toLowerCase() === systemAdmin.email.toLowerCase() ? systemAdmin : undefined);
+
+    if (demoUser) {
+        if (loginForm.password === 'password') {
+            // Simulate network delay for realism
+            setTimeout(() => {
+                setIsLoading(false);
+                onLogin(demoUser);
+            }, 600);
+            return;
+        } else {
+            // Found user, but wrong password. Don't hit Supabase.
+            setIsLoading(false);
+            setError("Incorrect password for Demo Account (Hint: try 'password')");
+            return;
+        }
+    }
+
+    // 2. If not a demo user, Attempt Supabase Login
     try {
-        // 1. Attempt Supabase Login
         const { data, error: authError } = await supabase.auth.signInWithPassword({
             email: loginForm.email,
             password: loginForm.password,
@@ -47,7 +68,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, team, systemAdmin }) => {
         if (authError) throw authError;
 
         if (data.user) {
-            // Construct User Object (In a real app, fetch profile from 'profiles' table)
+            // Construct User Object
             const user: TeamMember = {
                 id: data.user.id,
                 name: data.user.user_metadata.full_name || loginForm.email.split('@')[0],
@@ -61,15 +82,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, team, systemAdmin }) => {
         }
     } catch (err: any) {
         console.error("Login error:", err);
-        // Fallback for Demo Accounts (Constants) if Supabase fails or user is not in DB
-        const demoUser = team.find(m => m.email.toLowerCase() === loginForm.email.toLowerCase()) 
-                         || (loginForm.email.toLowerCase() === systemAdmin.email.toLowerCase() ? systemAdmin : undefined);
-        
-        if (demoUser && loginForm.password === 'password') {
-            onLogin(demoUser);
-        } else {
-            setError(err.message || 'Invalid credentials');
-        }
+        setError(err.message || 'Invalid login credentials. Please check your email and password.');
     } finally {
         setIsLoading(false);
     }
@@ -116,7 +129,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, team, systemAdmin }) => {
   const handleDemoLogin = (user: TeamMember) => {
       setLoginForm({ email: user.email, password: 'password' });
       setIsSignUp(false);
-      // Auto submit handled by state change if we added useEffect, but manual click for now is fine
+      // Auto-fill and let user click or we could auto-submit, but user interaction is better
   };
 
   return (
@@ -377,7 +390,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, team, systemAdmin }) => {
                                 </div>
 
                                 {error && (
-                                    <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-2xl font-medium text-center border border-red-100 dark:border-red-900 flex items-center justify-center gap-2">
+                                    <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-2xl font-medium text-center border border-red-100 dark:border-red-900 flex items-center justify-center gap-2 animate-in fade-in">
                                         <AlertCircle className="w-4 h-4"/> {error}
                                     </div>
                                 )}
@@ -411,7 +424,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, team, systemAdmin }) => {
                         {/* Demo Accounts - Only visible in Login Mode */}
                         {!isSignUp && (
                             <div className="mt-6 flex flex-wrap justify-center gap-2 opacity-60 hover:opacity-100 transition-opacity">
-                                <p className="w-full text-center text-xs text-slate-400 mb-1">Quick Demo Access (Fallback)</p>
+                                <p className="w-full text-center text-xs text-slate-400 mb-1">Quick Demo Access</p>
                                 {[
                                     { label: 'Doctor', user: team.find(t => t.role === 'Doctor') },
                                     { label: 'Reception', user: team.find(t => t.role === 'Receptionist') },
