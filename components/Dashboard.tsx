@@ -1,19 +1,15 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Appointment, InventoryItem, Patient, ViewState } from '../types';
-import { Users, Calendar, Activity, Search, Bell, ChevronDown, MoreHorizontal, Sparkles, LogOut, Settings, User, CheckCircle, AlertTriangle, Download, FileText, Share2 } from 'lucide-react';
+import { ViewState } from '../types';
+import { Users, Calendar, Activity, Search, Bell, ChevronDown, MoreHorizontal, Sparkles, LogOut, Settings, User, CheckCircle, Download, FileText, Share2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { generateDailyBriefing } from '../services/geminiService';
+import useStore from '../store';
 
-interface DashboardProps {
-  appointments: Appointment[];
-  inventory: InventoryItem[];
-  patients: Patient[];
-  setView: (view: ViewState) => void;
-  onLogout?: () => void;
-}
+const Dashboard: React.FC = () => {
+  const { appointments, patients, inventory, actions } = useStore();
+  const { setCurrentView, logout } = actions;
 
-const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory, setView, onLogout }) => {
   const [briefing, setBriefing] = useState<string | null>(null);
   const [loadingBriefing, setLoadingBriefing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -27,10 +23,10 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory
 
   // Notification Logic
   const [systemNotifications, setSystemNotifications] = useState<any[]>([]);
-  
+
   useEffect(() => {
       const msgs = [];
-      
+
       // Check Low Stock (Configure threshold: stock <= minStockLevel)
       const lowStockItems = inventory.filter(i => i.stock <= i.minStockLevel);
       if (lowStockItems.length > 0) {
@@ -60,19 +56,19 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory
   // Dynamic Data Generators based on TimeRange
   const getStatsByRange = (range: string) => {
     switch(range) {
-        case 'Daily': return { 
-            total: 12, old: 4, new: 8, appt: 12, 
-            chartData: [{name: '8am', val: 2}, {name: '10am', val: 5}, {name: '12pm', val: 3}, {name: '2pm', val: 8}, {name: '4pm', val: 4}] 
+        case 'Daily': return {
+            total: 12, old: 4, new: 8, appt: 12,
+            chartData: [{name: '8am', val: 2}, {name: '10am', val: 5}, {name: '12pm', val: 3}, {name: '2pm', val: 8}, {name: '4pm', val: 4}]
         };
-        case 'Weekly': return { 
+        case 'Weekly': return {
             total: 145, old: 40, new: 105, appt: 80,
             chartData: [{name: 'Mon', val: 20}, {name: 'Tue', val: 45}, {name: 'Wed', val: 30}, {name: 'Thu', val: 50}, {name: 'Fri', val: 35}, {name: 'Sat', val: 25}]
         };
-        case 'Yearly': return { 
+        case 'Yearly': return {
             total: 15420, old: 4200, new: 11220, appt: 9500,
             chartData: [{name: 'Jan', val: 400}, {name: 'Apr', val: 650}, {name: 'Jul', val: 900}, {name: 'Oct', val: 1200}]
         };
-        case 'Month': default: return { 
+        case 'Month': default: return {
             total: 1644, old: 300, new: 100, appt: 355,
             chartData: [{name: 'Week 1', val: 150}, {name: 'Week 2', val: 230}, {name: 'Week 3', val: 180}, {name: 'Week 4', val: 290}]
         };
@@ -113,7 +109,7 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory
       setSystemNotifications(prev => prev.map(n => ({ ...n, read: true })));
   };
 
-  const filteredPatients = patients.filter(p => 
+  const filteredPatients = patients.filter(p =>
       p.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -146,7 +142,7 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory
 
   // Filter appointments based on selected day
   const filteredAppointments = appointments.filter(appt => {
-      return appt.date === selectedDate; 
+      return appt.date === selectedDate;
   });
 
   return (
@@ -156,14 +152,14 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory
         setIsProfileOpen(false);
         setActiveMenuId(null);
     }}>
-      
+
       {/* Top Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 relative z-20">
         <div>
            <h2 className="text-xl text-slate-500 dark:text-slate-400 font-medium">Welcome back</h2>
            <div className="flex items-center gap-2">
              <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Dr. Andrew 👋</h1>
-             <button 
+             <button
                 onClick={(e) => { e.stopPropagation(); handleGetBriefing(); }}
                 disabled={loadingBriefing}
                 className="ml-2 p-2 bg-brand-50 dark:bg-brand-900/20 hover:bg-brand-100 dark:hover:bg-brand-900/40 rounded-full text-brand-600 dark:text-brand-400 transition-colors"
@@ -183,18 +179,18 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory
         <div className="flex items-center gap-4 w-full md:w-auto">
              <div className="relative flex-1 md:w-80 group">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 group-focus-within:text-brand-500 transition-colors" />
-                <input 
-                    type="text" 
-                    placeholder="Search recent patients..." 
+                <input
+                    type="text"
+                    placeholder="Search recent patients..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-transparent focus:border-brand-200 dark:focus:border-brand-800 rounded-xl shadow-sm focus:ring-4 focus:ring-brand-500/10 dark:text-white text-sm placeholder-slate-400 outline-none transition-all" 
+                    className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-transparent focus:border-brand-200 dark:focus:border-brand-800 rounded-xl shadow-sm focus:ring-4 focus:ring-brand-500/10 dark:text-white text-sm placeholder-slate-400 outline-none transition-all"
                 />
              </div>
-             
+
              {/* Time Range Dropdown */}
              <div className="relative">
-                <button 
+                <button
                     onClick={(e) => { e.stopPropagation(); setIsTimeDropdownOpen(!isTimeDropdownOpen); setIsNotifOpen(false); setIsProfileOpen(false); setActiveMenuId(null); }}
                     className="flex items-center gap-2 bg-white dark:bg-slate-800 px-4 py-2.5 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-sm font-medium text-slate-700 dark:text-slate-200 transition-all"
                 >
@@ -221,7 +217,7 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory
 
              {/* Notifications */}
              <div className="relative">
-                 <button 
+                 <button
                     onClick={(e) => { e.stopPropagation(); setIsNotifOpen(!isNotifOpen); setIsTimeDropdownOpen(false); setIsProfileOpen(false); setActiveMenuId(null); }}
                     className={`p-2.5 rounded-full shadow-sm relative transition-all border border-slate-100 dark:border-slate-700 ${isNotifOpen ? 'bg-brand-50 text-brand-600 dark:bg-slate-700 dark:text-white' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
                 >
@@ -257,7 +253,7 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory
 
              {/* Profile Dropdown */}
              <div className="relative">
-                 <button 
+                 <button
                     onClick={(e) => { e.stopPropagation(); setIsProfileOpen(!isProfileOpen); setIsTimeDropdownOpen(false); setIsNotifOpen(false); setActiveMenuId(null); }}
                     className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden border-2 border-white dark:border-slate-800 shadow-sm focus:ring-2 focus:ring-brand-500 transition-all cursor-pointer"
                 >
@@ -271,21 +267,21 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory
                              <p className="text-xs text-slate-500 dark:text-slate-400">andrew@juaafya.com</p>
                          </div>
                          <div className="p-2">
-                             <button 
-                                onClick={() => { setView('profile'); setIsProfileOpen(false); }}
+                             <button
+                                onClick={() => { setCurrentView('profile' as ViewState); setIsProfileOpen(false); }}
                                 className="w-full text-left px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg flex items-center gap-2 transition-colors"
                             >
                                  <User className="w-4 h-4" /> My Profile
                              </button>
-                             <button 
-                                onClick={() => { setView('settings'); setIsProfileOpen(false); }}
+                             <button
+                                onClick={() => { setCurrentView('settings' as ViewState); setIsProfileOpen(false); }}
                                 className="w-full text-left px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg flex items-center gap-2 transition-colors"
                             >
                                  <Settings className="w-4 h-4" /> Settings
                              </button>
                              <div className="h-px bg-slate-100 dark:bg-slate-700 my-1"></div>
-                             <button 
-                                onClick={() => { if (onLogout) onLogout(); }}
+                             <button
+                                onClick={() => { if (logout) logout(); }}
                                 className="w-full text-left px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex items-center gap-2 transition-colors"
                             >
                                  <LogOut className="w-4 h-4" /> Sign Out
@@ -299,13 +295,13 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory
 
       {/* Main Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 relative z-10">
-        
+
         {/* Left Column (Stats & Main Charts) */}
         <div className="lg:col-span-3 space-y-6">
-            
+
             {/* Stats Cards Row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                
+
                 {/* Card 1: Total Patients */}
                 <div className="bg-pastel-blue dark:bg-blue-900/40 p-6 rounded-3xl flex flex-col justify-between h-40 relative overflow-hidden group border border-transparent dark:border-blue-900/50 transition-all hover:shadow-lg hover:-translate-y-1 duration-300">
                      <div className="absolute top-4 right-4 p-2 bg-white/50 dark:bg-white/10 rounded-full backdrop-blur-sm">
@@ -385,15 +381,15 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory
 
             {/* Charts Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                
+
                 {/* Daily Appointment Stats */}
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 relative">
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="font-bold text-slate-900 dark:text-white">Daily Appointment Stats</h3>
                         <div className="relative">
-                            <MoreHorizontal 
+                            <MoreHorizontal
                                 onClick={(e) => toggleMenu(e, 'dailyStats')}
-                                className="text-slate-400 w-5 h-5 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200" 
+                                className="text-slate-400 w-5 h-5 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200"
                             />
                             {activeMenuId === 'dailyStats' && (
                                 <div className="absolute right-0 top-6 w-36 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-100 dark:border-slate-700 z-30 animate-in fade-in zoom-in-95 duration-100">
@@ -409,8 +405,8 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory
                                 <CartesianGrid vertical={false} stroke="#e2e8f0" strokeOpacity={0.1} strokeDasharray="4 4" />
                                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} dy={10} />
                                 <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} />
-                                <Tooltip 
-                                    cursor={{fill: 'transparent'}} 
+                                <Tooltip
+                                    cursor={{fill: 'transparent'}}
                                     contentStyle={{backgroundColor: '#1e293b', borderRadius: '8px', border: 'none', color: '#fff'}}
                                     itemStyle={{color: '#fff'}}
                                 />
@@ -425,9 +421,9 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="font-bold text-slate-900 dark:text-white">Appointment Stats</h3>
                         <div className="relative">
-                            <MoreHorizontal 
+                            <MoreHorizontal
                                 onClick={(e) => toggleMenu(e, 'curveStats')}
-                                className="text-slate-400 w-5 h-5 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200" 
+                                className="text-slate-400 w-5 h-5 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200"
                             />
                             {activeMenuId === 'curveStats' && (
                                 <div className="absolute right-0 top-6 w-36 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-100 dark:border-slate-700 z-30 animate-in fade-in zoom-in-95 duration-100">
@@ -449,8 +445,8 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory
                                 <CartesianGrid vertical={false} stroke="#e2e8f0" strokeOpacity={0.1} strokeDasharray="4 4" />
                                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} dy={10} />
                                 <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} />
-                                <Tooltip 
-                                    contentStyle={{backgroundColor: '#1e293b', borderRadius: '8px', border: 'none', color: '#fff'}} 
+                                <Tooltip
+                                    contentStyle={{backgroundColor: '#1e293b', borderRadius: '8px', border: 'none', color: '#fff'}}
                                     itemStyle={{color: '#fff'}}
                                 />
                                 <Area type="monotone" dataKey="val" stroke="#0d9488" strokeWidth={2} fillOpacity={1} fill="url(#colorVal)" />
@@ -470,7 +466,7 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory
                         <span className={`cursor-pointer transition-colors ${timeRange === 'Month' ? 'text-white bg-teal-600 px-3 py-1 rounded-lg' : 'hover:text-teal-600'}`} onClick={() => setTimeRange('Month')}>Monthly</span>
                     </div>
                 </div>
-                
+
                 <div className="overflow-x-auto w-full">
                     <table className="w-full text-left">
                         <thead className="bg-gray-50 dark:bg-slate-700/50 text-xs uppercase text-slate-400 font-semibold">
@@ -506,8 +502,8 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory
                                         <Activity className="w-4 h-4 text-red-400" />
                                     </td>
                                     <td className="px-4 py-4">
-                                        <button 
-                                            onClick={() => setView('patients')}
+                                        <button
+                                            onClick={() => setCurrentView('patients' as ViewState)}
                                             className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200"
                                         >
                                             View
@@ -529,15 +525,15 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory
 
         {/* Right Column (Side Widgets) */}
         <div className="space-y-6">
-            
+
             {/* Patient Overview Donut */}
             <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 relative">
                  <div className="flex justify-between items-center mb-4">
                     <h3 className="font-bold text-slate-900 dark:text-white">Patient Overview</h3>
                      <div className="relative">
-                        <MoreHorizontal 
+                        <MoreHorizontal
                             onClick={(e) => toggleMenu(e, 'donutStats')}
-                            className="text-slate-400 w-5 h-5 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200" 
+                            className="text-slate-400 w-5 h-5 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200"
                         />
                         {activeMenuId === 'donutStats' && (
                             <div className="absolute right-0 top-6 w-36 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-100 dark:border-slate-700 z-30 animate-in fade-in zoom-in-95 duration-100">
@@ -585,16 +581,16 @@ const Dashboard: React.FC<DashboardProps> = ({ appointments, patients, inventory
                     <h3 className="font-bold text-slate-900 dark:text-white">Upcoming</h3>
                     <ChevronDown className="text-slate-400 w-4 h-4 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200" />
                 </div>
-                
+
                 {/* Simulated Calendar Strip */}
                 <div className="flex justify-between mb-6 bg-slate-50 dark:bg-slate-700 p-2 rounded-xl">
                     {calendarDays.map((d, index) => (
-                        <button 
+                        <button
                             key={index}
                             onClick={() => setSelectedDate(d.fullDate)}
                             className={`flex flex-col items-center p-2 rounded-lg transition-all ${
-                                selectedDate === d.fullDate 
-                                ? 'bg-teal-600 text-white shadow-md transform scale-105' 
+                                selectedDate === d.fullDate
+                                ? 'bg-teal-600 text-white shadow-md transform scale-105'
                                 : 'text-slate-400 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-600 hover:shadow-sm'
                             }`}
                         >
