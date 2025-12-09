@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Patient, Gender } from '../types';
+import { Patient, Gender, ClinicSettings } from '../types';
 import { Search, Plus, Phone, FileText, Sparkles, X, Activity, MessageSquare, MoreHorizontal, Printer, Filter, Edit2, Save, User, Trash2, Send, Loader2, Eye, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { analyzePatientNotes, draftAppointmentSms } from '../services/geminiService';
 import { sendSms } from '../services/smsService';
@@ -10,9 +10,10 @@ interface PatientListProps {
   addPatient: (p: Patient) => void;
   updatePatient: (p: Patient) => void;
   deletePatient: (id: string) => void;
+  settings?: ClinicSettings;
 }
 
-const PatientList: React.FC<PatientListProps> = ({ patients, addPatient, updatePatient, deletePatient }) => {
+const PatientList: React.FC<PatientListProps> = ({ patients, addPatient, updatePatient, deletePatient, settings }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   
@@ -104,7 +105,8 @@ const PatientList: React.FC<PatientListProps> = ({ patients, addPatient, updateP
     if (!selectedPatient || !smsDraft) return;
 
     setSendingSms(true);
-    const result = await sendSms(selectedPatient.phone, smsDraft);
+    // Use configured settings if available
+    const result = await sendSms(selectedPatient.phone, smsDraft, settings?.smsConfig);
     setSendingSms(false);
 
     if (result.status === 'success') {

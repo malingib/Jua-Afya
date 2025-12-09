@@ -1,8 +1,10 @@
 
+import { SmsConfig } from '../types';
+
 // Mobiwave SMS Integration Service
 
 // API Configuration from documentation
-const API_TOKEN = process.env.SMS_API_KEY || '';
+const DEFAULT_API_TOKEN = process.env.SMS_API_KEY || '';
 const BASE_URL = 'https://sms.mobiwave.co.ke/api/v3';
 const DEFAULT_SENDER_ID = 'MOBIWAVE'; // Alphanumeric sender ID
 
@@ -16,11 +18,15 @@ export interface SmsResponse {
  * Sends an SMS using Mobiwave SMS API.
  * @param recipient Phone number (e.g. +254712345678)
  * @param message Text message content
+ * @param config Optional SMS Configuration (API Key, Sender ID)
  */
-export const sendSms = async (recipient: string, message: string): Promise<SmsResponse> => {
-  if (!API_TOKEN) {
+export const sendSms = async (recipient: string, message: string, config?: SmsConfig): Promise<SmsResponse> => {
+  const apiToken = config?.apiKey || DEFAULT_API_TOKEN;
+  const senderId = config?.senderId || DEFAULT_SENDER_ID;
+
+  if (!apiToken) {
     console.warn("SMS_API_KEY is missing. SMS functionality will be simulated or fail.");
-    return { status: 'error', message: 'SMS configuration missing (API Key).' };
+    return { status: 'error', message: 'SMS configuration missing (API Key not set in Settings).' };
   }
 
   // 1. Format recipient: Mobiwave usually expects digits (e.g. 254712345678)
@@ -35,13 +41,13 @@ export const sendSms = async (recipient: string, message: string): Promise<SmsRe
     const response = await fetch(`${BASE_URL}/sms/send`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${API_TOKEN}`,
+        'Authorization': `Bearer ${apiToken}`,
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
       body: JSON.stringify({
         recipient: cleanRecipient,
-        sender_id: DEFAULT_SENDER_ID,
+        sender_id: senderId,
         type: 'plain',
         message: message,
       }),

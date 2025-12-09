@@ -4,8 +4,8 @@ import {
   Bell, Lock, Globe, CreditCard, ChevronRight, Moon, Sun, Save, 
   Upload, Shield, Smartphone, Mail, AlertTriangle, CheckCircle, 
   Layout, Receipt, Laptop, Smartphone as SmartphoneIcon, LogOut, Loader2,
-  Users, UserPlus, Database, FileText, Activity, Trash2, X, Plus, Download, RefreshCw,
-  Zap, Check, ArrowRight
+  Users, UserPlus, Database, Activity, Trash2, X, Plus, Download, RefreshCw,
+  Zap, Check, ArrowRight, Link
 } from 'lucide-react';
 import { ClinicSettings, Role, TeamMember } from '../types';
 
@@ -16,7 +16,7 @@ interface SettingsProps {
     updateSettings: (s: ClinicSettings) => void;
 }
 
-type Tab = 'general' | 'notifications' | 'security' | 'billing' | 'team' | 'logs';
+type Tab = 'general' | 'notifications' | 'integrations' | 'security' | 'billing' | 'team' | 'logs';
 
 // Mock Plans Data
 const PLANS = [
@@ -454,6 +454,48 @@ const Settings: React.FC<SettingsProps> = ({ isDarkMode, toggleTheme, settings, 
                          </div>
                      </div>
                  ))}
+            </div>
+          </div>
+      </div>
+  );
+
+  const renderIntegrations = () => (
+      <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
+                <SmartphoneIcon className="w-5 h-5 text-indigo-600" /> SMS Gateway Configuration
+            </h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                Configure your SMS provider settings (Mobiwave) to enable automated messaging.
+            </p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1 block">API Key / Token</label>
+                    <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input 
+                            type="password"
+                            name="apiKey"
+                            value={formData.smsConfig?.apiKey || ''} 
+                            onChange={(e) => handleNestedChange('smsConfig', 'apiKey', e.target.value)}
+                            className="w-full pl-10 pr-3 py-3 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-teal-500 outline-none text-slate-900 dark:text-white"
+                            placeholder="Enter your API Key"
+                        />
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">Get this from your Mobiwave dashboard.</p>
+                </div>
+                <div>
+                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1 block">Sender ID</label>
+                    <input 
+                        name="senderId"
+                        value={formData.smsConfig?.senderId || ''} 
+                        onChange={(e) => handleNestedChange('smsConfig', 'senderId', e.target.value)}
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-teal-500 outline-none text-slate-900 dark:text-white"
+                        placeholder="e.g. MOBIWAVE or CLINIC"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">Must be registered and approved.</p>
+                </div>
             </div>
           </div>
       </div>
@@ -1045,6 +1087,7 @@ const Settings: React.FC<SettingsProps> = ({ isDarkMode, toggleTheme, settings, 
                     { id: 'general', label: 'General', icon: Layout },
                     { id: 'team', label: 'Team Members', icon: Users },
                     { id: 'notifications', label: 'Notifications', icon: Bell },
+                    { id: 'integrations', label: 'Integrations', icon: Link },
                     { id: 'security', label: 'Security & Access', icon: Shield },
                     { id: 'billing', label: 'Billing & Plans', icon: CreditCard },
                     { id: 'logs', label: 'Audit Logs', icon: Activity },
@@ -1087,6 +1130,7 @@ const Settings: React.FC<SettingsProps> = ({ isDarkMode, toggleTheme, settings, 
             <div className="lg:col-span-9">
                 {activeTab === 'general' && renderGeneral()}
                 {activeTab === 'notifications' && renderNotifications()}
+                {activeTab === 'integrations' && renderIntegrations()}
                 {activeTab === 'security' && renderSecurity()}
                 {activeTab === 'billing' && renderBilling()}
                 {activeTab === 'team' && renderTeam()}

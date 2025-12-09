@@ -104,6 +104,12 @@ export interface TeamMember {
   avatar?: string;
 }
 
+export interface SmsConfig {
+  apiKey: string;
+  senderId: string;
+  providerUrl?: string;
+}
+
 export interface ClinicSettings {
   name: string;
   phone: string;
@@ -114,6 +120,7 @@ export interface ClinicSettings {
   language: string;
   timezone: string;
   smsEnabled: boolean; // Legacy simplified toggle
+  smsConfig: SmsConfig;
   notifications: NotificationPreferences;
   security: {
     twoFactorEnabled: boolean;

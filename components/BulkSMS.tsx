@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Patient, Gender } from '../types';
+import { Patient, Gender, ClinicSettings } from '../types';
 import { 
   MessageSquare, Users, Send, Clock, CheckCircle, AlertCircle, 
   Search, Filter, Sparkles, X, History, Plus, Loader2, Play 
@@ -11,6 +11,7 @@ import { sendSms } from '../services/smsService';
 interface BulkSMSProps {
   patients: Patient[];
   showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
+  settings?: ClinicSettings;
 }
 
 interface Campaign {
@@ -23,7 +24,7 @@ interface Campaign {
     type: 'Broadcast' | 'Reminder';
 }
 
-const BulkSMS: React.FC<BulkSMSProps> = ({ patients, showToast }) => {
+const BulkSMS: React.FC<BulkSMSProps> = ({ patients, showToast, settings }) => {
   const [activeTab, setActiveTab] = useState<'compose' | 'history'>('compose');
   const [loadingAI, setLoadingAI] = useState(false);
   
@@ -99,8 +100,8 @@ const BulkSMS: React.FC<BulkSMSProps> = ({ patients, showToast }) => {
           const batch = recipients.slice(i, i + batchSize);
           
           await Promise.all(batch.map(async (recipient) => {
-               // In a real app, we would use the recipient.id to log individual statuses
-               const res = await sendSms(recipient.phone, message);
+               // Use configured settings if available
+               const res = await sendSms(recipient.phone, message, settings?.smsConfig);
                if (res.status === 'success') successCount++;
           }));
 

@@ -16,7 +16,7 @@ import WhatsAppAgent from './components/WhatsAppAgent';
 import Login from './components/Login';
 import { ViewState, Patient, Appointment, InventoryItem, ClinicSettings, Notification, Supplier, InventoryLog, Visit, VisitPriority, TeamMember } from './types';
 import { MOCK_PATIENTS, MOCK_APPOINTMENTS, MOCK_INVENTORY, MOCK_SUPPLIERS, MOCK_LOGS, MOCK_VISITS } from './constants';
-import { CheckCircle, AlertCircle, X, Loader2 } from 'lucide-react';
+import { CheckCircle, AlertCircle, X, Loader2, Database, WifiOff } from 'lucide-react';
 import { supabase } from './lib/supabaseClient';
 import { db } from './services/db';
 
@@ -35,6 +35,7 @@ const SYSTEM_ADMIN: TeamMember = {
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewState>('dashboard');
   const [isAppLoading, setIsAppLoading] = useState(true);
+  const [isDemoMode, setIsDemoMode] = useState(false);
   
   // -- Theme Persistence --
   const [darkMode, setDarkMode] = useState(() => {
@@ -65,69 +66,104 @@ const App: React.FC = () => {
   const [inventoryLogs, setInventoryLogs] = useState<InventoryLog[]>(MOCK_LOGS); // Keep local/mock for logs for now to save DB space
   const [visits, setVisits] = useState<Visit[]>([]);
   
-  const [settings, setSettings] = useState<ClinicSettings>({
-      name: 'JuaAfya Medical Centre',
-      phone: '+254 712 345 678',
-      email: 'admin@juaafya.com',
-      location: 'Nairobi, Kenya',
-      currency: 'KSh',
-      language: 'English',
-      timezone: 'EAT (GMT+3)',
-      smsEnabled: true,
-      logo: '',
-      notifications: {
-          appointmentReminders: true,
-          lowStockAlerts: true,
-          dailyReports: false,
-          marketingEmails: false,
-          alertEmail: 'admin@juaafya.com'
-      },
-      security: {
-          twoFactorEnabled: false,
-          lastPasswordChange: '2023-09-15'
-      },
-      billing: {
-          plan: 'Pro',
-          status: 'Active',
-          nextBillingDate: '2023-11-01',
-          paymentMethod: {
-              type: 'Card',
-              last4: '4242',
-              brand: 'Visa',
-              expiry: '12/25'
-          }
-      },
-      team: [
-        { id: '1', name: 'Dr. Andrew Kimani', email: 'andrew@juaafya.com', phone: '+254712345678', role: 'Admin', status: 'Active', lastActive: 'Now', avatar: 'https://i.pravatar.cc/150?img=11' },
-        { id: '2', name: 'Sarah Wanjiku', email: 'sarah@juaafya.com', phone: '+254722987654', role: 'Nurse', status: 'Active', lastActive: '2h ago', avatar: 'https://i.pravatar.cc/150?img=5' },
-        { id: '3', name: 'John Omondi', email: 'john@juaafya.com', phone: '+254733111222', role: 'Doctor', status: 'Active', lastActive: '5m ago', avatar: 'https://i.pravatar.cc/150?img=12' },
-        { id: '4', name: 'Grace M.', email: 'grace@juaafya.com', phone: '+254700123456', role: 'Receptionist', status: 'Active', lastActive: 'Now', avatar: 'https://i.pravatar.cc/150?img=9' },
-        { id: '5', name: 'Peter K.', email: 'peter@juaafya.com', phone: '+254799888777', role: 'Lab Tech', status: 'Active', lastActive: '10m ago', avatar: 'https://i.pravatar.cc/150?img=8' }
-      ]
+  // Initial Settings with Persistence
+  const [settings, setSettings] = useState<ClinicSettings>(() => {
+      const saved = localStorage.getItem('juaafya_settings');
+      const defaults: ClinicSettings = {
+          name: 'JuaAfya Medical Centre',
+          phone: '+254 712 345 678',
+          email: 'admin@juaafya.com',
+          location: 'Nairobi, Kenya',
+          currency: 'KSh',
+          language: 'English',
+          timezone: 'EAT (GMT+3)',
+          smsEnabled: true,
+          logo: '',
+          smsConfig: {
+              apiKey: '',
+              senderId: 'MOBIWAVE',
+          },
+          notifications: {
+              appointmentReminders: true,
+              lowStockAlerts: true,
+              dailyReports: false,
+              marketingEmails: false,
+              alertEmail: 'admin@juaafya.com'
+          },
+          security: {
+              twoFactorEnabled: false,
+              lastPasswordChange: '2023-09-15'
+          },
+          billing: {
+              plan: 'Pro',
+              status: 'Active',
+              nextBillingDate: '2023-11-01',
+              paymentMethod: {
+                  type: 'Card',
+                  last4: '4242',
+                  brand: 'Visa',
+                  expiry: '12/25'
+              }
+          },
+          team: [
+            { id: '1', name: 'Dr. Andrew Kimani', email: 'andrew@juaafya.com', phone: '+254712345678', role: 'Admin', status: 'Active', lastActive: 'Now', avatar: 'https://i.pravatar.cc/150?img=11' },
+            { id: '2', name: 'Sarah Wanjiku', email: 'sarah@juaafya.com', phone: '+254722987654', role: 'Nurse', status: 'Active', lastActive: '2h ago', avatar: 'https://i.pravatar.cc/150?img=5' },
+            { id: '3', name: 'John Omondi', email: 'john@juaafya.com', phone: '+254733111222', role: 'Doctor', status: 'Active', lastActive: '5m ago', avatar: 'https://i.pravatar.cc/150?img=12' },
+            { id: '4', name: 'Grace M.', email: 'grace@juaafya.com', phone: '+254700123456', role: 'Receptionist', status: 'Active', lastActive: 'Now', avatar: 'https://i.pravatar.cc/150?img=9' },
+            { id: '5', name: 'Peter K.', email: 'peter@juaafya.com', phone: '+254799888777', role: 'Lab Tech', status: 'Active', lastActive: '10m ago', avatar: 'https://i.pravatar.cc/150?img=8' }
+          ]
+      };
+
+      if (saved) {
+          try {
+              const parsed = JSON.parse(saved);
+              // Merge to ensure structure integrity if types change
+              return { ...defaults, ...parsed }; 
+          } catch(e) { return defaults; }
+      }
+      return defaults;
   });
 
   const [currentUser, setCurrentUser] = useState<TeamMember | null>(null);
 
   // -- Data Fetching --
   const fetchData = async () => {
-      try {
-          const [pts, inv, appts, vis, sups] = await Promise.all([
-              db.getPatients(),
-              db.getInventory(),
-              db.getAppointments(),
-              db.getVisits(),
-              db.getSuppliers()
-          ]);
-          setPatients(pts);
-          setInventory(inv);
-          setAppointments(appts);
-          setVisits(vis);
-          setSuppliers(sups);
-      } catch (e) {
-          console.error("Failed to fetch initial data", e);
-          showToast("Offline Mode: Using local/cached data", 'info');
-          // Fallback handled in db service or use MOCK_CONSTANTS here if critical
+      // First, check connection
+      const connected = await db.checkConnection();
+      
+      if (connected) {
+          setIsDemoMode(false);
+          try {
+              const [pts, inv, appts, vis, sups] = await Promise.all([
+                  db.getPatients(),
+                  db.getInventory(),
+                  db.getAppointments(),
+                  db.getVisits(),
+                  db.getSuppliers()
+              ]);
+              setPatients(pts);
+              setInventory(inv);
+              setAppointments(appts);
+              setVisits(vis);
+              setSuppliers(sups);
+          } catch (e) {
+              console.error("Data fetch failed despite connection check.", e);
+              loadMockData();
+          }
+      } else {
+          console.warn("Database unavailable. Loading Demo Data.");
+          loadMockData();
       }
+  };
+
+  const loadMockData = () => {
+      setIsDemoMode(true);
+      setPatients(MOCK_PATIENTS);
+      setInventory(MOCK_INVENTORY);
+      setAppointments(MOCK_APPOINTMENTS);
+      setVisits(MOCK_VISITS);
+      setSuppliers(MOCK_SUPPLIERS);
+      showToast("Offline Mode: Using local demo data.", 'info');
   };
 
   // -- Auth Listener --
@@ -154,7 +190,8 @@ const App: React.FC = () => {
               if (storedUser) {
                   try {
                       setCurrentUser(JSON.parse(storedUser));
-                      await fetchData();
+                      // If it's a persisted demo user, just load mocks immediately or check DB if we want robust fallback
+                      await fetchData(); 
                   } catch (e) {
                       localStorage.removeItem('juaafya_demo_user');
                   }
@@ -180,8 +217,6 @@ const App: React.FC = () => {
               await fetchData();
           } else if (event === 'SIGNED_OUT') {
               // Only clear if we are not in persistent demo mode (though handleLogout covers this mostly)
-              // If signed out from Supabase, we should likely clear everything
-              // But manual logout triggers this.
           }
       });
 
@@ -241,17 +276,25 @@ const App: React.FC = () => {
 
   const addPatient = async (patient: Patient) => {
     try {
-        await db.createPatient(patient);
-        setPatients(prev => [patient, ...prev]);
-        showToast(`Patient ${patient.name} added successfully!`);
+        let newPatient = patient;
+        if (!isDemoMode) {
+             const saved = await db.createPatient(patient);
+             if (saved) newPatient = saved;
+        }
+        setPatients(prev => [newPatient, ...prev]);
+        showToast(`Patient ${newPatient.name} added successfully!`);
     } catch (e) {
-        showToast("Error adding patient", 'error');
+        showToast("Error adding patient to database.", 'error');
+        // Optimistically add locally if it fails but warn
+        if (isDemoMode) {
+             setPatients(prev => [patient, ...prev]);
+        }
     }
   };
 
   const updatePatient = async (updatedPatient: Patient) => {
     try {
-        await db.updatePatient(updatedPatient);
+        if (!isDemoMode) await db.updatePatient(updatedPatient);
         setPatients(prev => prev.map(p => p.id === updatedPatient.id ? updatedPatient : p));
         showToast(`Patient record updated.`);
     } catch (e) {
@@ -261,7 +304,7 @@ const App: React.FC = () => {
 
   const deletePatient = async (id: string) => {
     try {
-        await db.deletePatient(id);
+        if (!isDemoMode) await db.deletePatient(id);
         setPatients(prev => prev.filter(p => p.id !== id));
         showToast(`Patient deleted.`, 'info');
     } catch (e) {
@@ -286,10 +329,14 @@ const App: React.FC = () => {
 
   const addInventoryItem = async (item: InventoryItem) => {
     try {
-        await db.createInventoryItem(item);
-        setInventory(prev => [item, ...prev]);
-        logInventoryAction(item, 'Created', item.stock, 'Initial stock entry');
-        showToast(`${item.name} added to inventory.`);
+        let newItem = item;
+        if (!isDemoMode) {
+            const saved = await db.createInventoryItem(item);
+            if (saved) newItem = saved;
+        }
+        setInventory(prev => [newItem, ...prev]);
+        logInventoryAction(newItem, 'Created', newItem.stock, 'Initial stock entry');
+        showToast(`${newItem.name} added to inventory.`);
     } catch (e) {
         showToast('Error creating item', 'error');
     }
@@ -297,7 +344,7 @@ const App: React.FC = () => {
 
   const updateInventoryItem = async (updatedItem: InventoryItem, reason = 'Updated details') => {
       try {
-          await db.updateInventoryItem(updatedItem);
+          if (!isDemoMode) await db.updateInventoryItem(updatedItem);
           const oldItem = inventory.find(i => i.id === updatedItem.id);
           const stockDiff = updatedItem.stock - (oldItem?.stock || 0);
           
@@ -316,7 +363,7 @@ const App: React.FC = () => {
 
   const deleteInventoryItem = async (id: string) => {
       try {
-          await db.deleteInventoryItem(id);
+          if (!isDemoMode) await db.deleteInventoryItem(id);
           const item = inventory.find(i => i.id === id);
           if (item) logInventoryAction(item, 'Deleted', -item.stock, 'Item removed');
           setInventory(prev => prev.filter(i => i.id !== id));
@@ -329,8 +376,12 @@ const App: React.FC = () => {
   // -- Supplier Handlers --
   const addSupplier = async (supplier: Supplier) => {
       try {
-          await db.createSupplier(supplier);
-          setSuppliers(prev => [...prev, supplier]);
+          let newSupplier = supplier;
+          if (!isDemoMode) {
+              const saved = await db.createSupplier(supplier);
+              if (saved) newSupplier = saved;
+          }
+          setSuppliers(prev => [...prev, newSupplier]);
           showToast('Supplier added successfully.');
       } catch (e) {
           showToast('Error adding supplier', 'error');
@@ -338,13 +389,13 @@ const App: React.FC = () => {
   };
 
   const updateSupplier = (updated: Supplier) => {
-      // DB update placeholder
+      // DB update placeholder (Implementation pending in db.ts)
       setSuppliers(prev => prev.map(s => s.id === updated.id ? updated : s));
       showToast('Supplier updated.');
   };
 
   const deleteSupplier = (id: string) => {
-      // DB delete placeholder
+      // DB delete placeholder (Implementation pending in db.ts)
       setSuppliers(prev => prev.filter(s => s.id !== id));
       setInventory(prev => prev.map(item => item.supplierId === id ? { ...item, supplierId: undefined } : item));
       showToast('Supplier removed.', 'info');
@@ -352,9 +403,13 @@ const App: React.FC = () => {
 
   const addAppointment = async (newAppt: Appointment) => {
     try {
-        await db.createAppointment(newAppt);
-        setAppointments(prev => [...prev, newAppt]);
-        showToast(`Appointment scheduled for ${newAppt.patientName}.`);
+        let createdAppt = newAppt;
+        if (!isDemoMode) {
+            const saved = await db.createAppointment(newAppt);
+            if (saved) createdAppt = saved;
+        }
+        setAppointments(prev => [...prev, createdAppt]);
+        showToast(`Appointment scheduled for ${createdAppt.patientName}.`);
     } catch (e) {
         showToast('Error scheduling appointment', 'error');
     }
@@ -362,7 +417,7 @@ const App: React.FC = () => {
 
   const updateAppointment = async (updatedAppt: Appointment) => {
     try {
-        await db.updateAppointment(updatedAppt);
+        if (!isDemoMode) await db.updateAppointment(updatedAppt);
         setAppointments(prev => prev.map(a => a.id === updatedAppt.id ? updatedAppt : a));
     } catch (e) {
         showToast('Error updating appointment', 'error');
@@ -371,6 +426,7 @@ const App: React.FC = () => {
 
   const updateSettings = (newSettings: ClinicSettings) => {
       setSettings(newSettings);
+      localStorage.setItem('juaafya_settings', JSON.stringify(newSettings));
       showToast('Settings saved successfully!');
   };
 
@@ -380,7 +436,7 @@ const App: React.FC = () => {
     if (!patient) return;
 
     const newVisit: Visit = {
-      id: `V${Date.now()}`,
+      id: `V${Date.now()}`, // Temp ID
       patientId: patient.id,
       patientName: patient.name,
       stage: skipVitals ? 'Consultation' : 'Vitals',
@@ -398,8 +454,12 @@ const App: React.FC = () => {
     };
     
     try {
-        await db.createVisit(newVisit);
-        setVisits(prev => [...prev, newVisit]);
+        let createdVisit = newVisit;
+        if (!isDemoMode) {
+            const saved = await db.createVisit(newVisit);
+            if (saved) createdVisit = saved;
+        }
+        setVisits(prev => [...prev, createdVisit]);
         showToast(`${patient.name} checked in.`);
     } catch (e) {
         showToast('Error checking in patient', 'error');
@@ -408,7 +468,7 @@ const App: React.FC = () => {
 
   const updateVisit = async (updatedVisit: Visit) => {
     try {
-        await db.updateVisit(updatedVisit);
+        if (!isDemoMode) await db.updateVisit(updatedVisit);
         setVisits(prev => prev.map(v => v.id === updatedVisit.id ? updatedVisit : v));
     } catch (e) {
         showToast('Error updating visit', 'error');
@@ -425,7 +485,7 @@ const App: React.FC = () => {
               updatedInventory[itemIndex] = { ...item, stock: newStock };
               
               logInventoryAction(item, 'Dispensed', -med.quantity, `Prescription for ${visit.patientName}`);
-              db.updateInventoryItem(updatedInventory[itemIndex]); // Async update
+              if (!isDemoMode) db.updateInventoryItem(updatedInventory[itemIndex]); // Async update
           }
       });
       setInventory(updatedInventory);
@@ -489,7 +549,7 @@ const App: React.FC = () => {
         const tab = currentView.replace('sa-', '') as any;
         return <SuperAdminDashboard currentUser={currentUser} switchUser={switchUser} team={settings.team} activeTab={tab} />;
       case 'patients':
-        return <PatientList patients={patients} addPatient={addPatient} updatePatient={updatePatient} deletePatient={deletePatient} />;
+        return <PatientList patients={patients} addPatient={addPatient} updatePatient={updatePatient} deletePatient={deletePatient} settings={settings} />;
       case 'appointments':
         return <Appointments appointments={appointments} patients={patients} addAppointment={addAppointment} updateAppointment={updateAppointment} showToast={showToast} />;
       case 'pharmacy':
@@ -509,7 +569,7 @@ const App: React.FC = () => {
             />
         );
       case 'bulk-sms':
-        return <BulkSMS patients={patients} showToast={showToast} />;
+        return <BulkSMS patients={patients} showToast={showToast} settings={settings} />;
       case 'whatsapp-agent':
         return (
             <WhatsAppAgent 
@@ -585,6 +645,12 @@ const App: React.FC = () => {
       />
 
       <main className="flex-1 md:ml-64 lg:ml-72 w-full transition-all duration-300">
+        {isDemoMode && (
+            <div className="bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 px-4 py-2 text-xs font-bold flex items-center justify-center gap-2 border-b border-amber-200 dark:border-amber-800 animate-in slide-in-from-top">
+                <WifiOff className="w-4 h-4" />
+                <span>Demo Mode Active: You are viewing local sample data. Database connection is unavailable.</span>
+            </div>
+        )}
         <div className="md:hidden bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 sticky top-0 z-10 flex items-center justify-between no-print">
            <div className="flex items-center gap-2">
                 <div className="w-8 h-8 flex items-center justify-center">

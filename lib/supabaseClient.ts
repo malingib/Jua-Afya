@@ -1,14 +1,31 @@
-
 import { createClient } from '@supabase/supabase-js';
 
-// Configuration provided by the user
-const SUPABASE_URL = 'https://cbyikofnphjoxnnwtunw.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNieWlrb2ZucGhqb3hubnd0dW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyMTY3MzYsImV4cCI6MjA4MDc5MjczNn0.e2SvbpRLTXm1MPdYXNA3DOKijEHtEiHTxCd37uP_Z7o';
+// Safe environment variable retrieval
+const getEnv = (key: string) => {
+  try {
+    if (typeof process !== 'undefined' && process.env) {
+      return process.env[key];
+    }
+  } catch (e) {
+    // Ignore reference errors
+  }
+  return undefined;
+};
+
+// Fallback values prevent the "supabaseUrl is required" crash
+// This allows the app to initialize and fail gracefully into Demo Mode later
+const SUPABASE_URL = getEnv('SUPABASE_URL') || 'https://placeholder.supabase.co';
+const SUPABASE_ANON_KEY = getEnv('SUPABASE_ANON_KEY') || 'placeholder';
+
+if (SUPABASE_URL === 'https://placeholder.supabase.co') {
+  console.warn('Supabase URL is missing or using placeholder. App will default to Demo Mode.');
+}
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // --- SQL SCHEMA INSTRUCTIONS ---
-// Copy and Run the following SQL in your Supabase SQL Editor to create the necessary tables.
+// Ensure your Supabase Database has the following tables.
+// Run this SQL in your Supabase SQL Editor.
 
 /*
 -- Enable UUID extension
@@ -83,6 +100,9 @@ create table if not exists visits (
   consultation_fee numeric default 0,
   total_bill numeric default 0,
   payment_status text default 'Pending',
+  chief_complaint text,
+  diagnosis text,
+  doctor_notes text,
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
 
@@ -96,7 +116,7 @@ create table if not exists suppliers (
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
 
--- Enable RLS (Optional, for demo purposes we assume public or authenticated access)
+-- Enable RLS
 alter table patients enable row level security;
 create policy "Public access" on patients for all using (true);
 alter table inventory enable row level security;
@@ -107,14 +127,4 @@ alter table visits enable row level security;
 create policy "Public access" on visits for all using (true);
 alter table suppliers enable row level security;
 create policy "Public access" on suppliers for all using (true);
-
--- SEED DATA (Optional) --
-INSERT INTO patients (name, phone, age, gender, notes, last_visit, vitals) VALUES
-('Wanjiku Kamau', '+254 712 345 678', 34, 'Female', 'Patient complains of persistent headache.', '2023-10-15', '{"bp": "140/90", "heartRate": "88", "temp": "37.8", "weight": "68"}'),
-('Juma Ochieng', '+254 722 987 654', 45, 'Male', 'Follow up on fractured arm.', '2023-10-20', '{"bp": "120/80", "heartRate": "72", "temp": "36.5", "weight": "75"}');
-
-INSERT INTO inventory (name, stock, min_stock_level, unit, category, price) VALUES
-('Paracetamol 500mg', 1500, 500, 'Tablets', 'Medicine', 5),
-('Amoxicillin 250mg', 400, 200, 'Tablets', 'Medicine', 15),
-('Malaria Test Kit', 45, 50, 'Kits', 'Lab', 200);
 */
