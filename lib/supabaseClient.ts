@@ -131,6 +131,24 @@ create table if not exists suppliers (
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
 
+-- 8. Lab Tests
+create table if not exists lab_tests (
+  id uuid default uuid_generate_v4() primary key,
+  clinic_id uuid references clinics(id) not null,
+  name text not null,
+  price numeric default 0,
+  category text,
+  created_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+-- 9. Settings
+create table if not exists settings (
+  id uuid default uuid_generate_v4() primary key,
+  clinic_id uuid references clinics(id) not null unique,
+  consultation_fee numeric default 500,
+  created_at timestamp with time zone default timezone('utc'::text, now())
+);
+
 -- RLS POLICIES --
 
 -- Helper function to get the current user's clinic_id

@@ -72,15 +72,6 @@ export const MOCK_INVENTORY: InventoryItem[] = [
   { id: 'I005', name: 'Cough Syrup', stock: 8, minStockLevel: 20, unit: 'Bottles', category: 'Medicine', price: 350, batchNumber: 'CS-88', expiryDate: '2025-01-01', supplierId: 'S002' }, // Low stock
 ];
 
-export const MOCK_LAB_TESTS: LabTestProfile[] = [
-    { id: 'T001', name: 'Full Hemogram (CBC)', price: 800, category: 'Hematology' },
-    { id: 'T002', name: 'Malaria Smear', price: 300, category: 'Microbiology' },
-    { id: 'T003', name: 'Urinalysis', price: 400, category: 'Microbiology' },
-    { id: 'T004', name: 'Random Blood Sugar', price: 200, category: 'Biochemistry' },
-    { id: 'T005', name: 'Lipid Profile', price: 1500, category: 'Biochemistry' },
-    { id: 'T006', name: 'X-Ray (Chest)', price: 1200, category: 'Radiology' },
-];
-
 export const MOCK_LOGS: InventoryLog[] = [
   { id: 'L001', itemId: 'I001', itemName: 'Paracetamol 500mg', action: 'Restocked', quantityChange: 1000, notes: 'Monthly restock', timestamp: '2023-10-01T09:00:00Z', user: 'Dr. Andrew' },
   { id: 'L002', itemId: 'I005', itemName: 'Cough Syrup', action: 'Dispensed', quantityChange: -2, notes: 'Prescription #882', timestamp: '2023-10-24T14:30:00Z', user: 'Nurse Sarah' },

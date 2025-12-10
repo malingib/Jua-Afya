@@ -1,6 +1,6 @@
 
 import create from 'zustand';
-import { Patient, Appointment, InventoryItem, ClinicSettings, Notification, Supplier, InventoryLog, Visit, TeamMember } from './types';
+import { Patient, Appointment, InventoryItem, ClinicSettings, Notification, Supplier, InventoryLog, Visit, TeamMember, LabTestProfile } from './types';
 import { MOCK_PATIENTS, MOCK_APPOINTMENTS, MOCK_INVENTORY, MOCK_SUPPLIERS, MOCK_LOGS, MOCK_VISITS } from './constants';
 import { db } from './services/db';
 import { supabase } from './lib/supabaseClient';
@@ -17,6 +17,7 @@ interface AppState {
   inventoryLogs: InventoryLog[];
   visits: Visit[];
   settings: ClinicSettings;
+  labTests: LabTestProfile[];
   currentUser: TeamMember | null;
   toasts: Notification[];
   actions: {
@@ -137,14 +138,18 @@ const useStore = create<AppState>((set, get) => ({
       if (connected) {
         set({ isDemoMode: false });
         try {
-          const [patients, inventory, appointments, visits, suppliers] = await Promise.all([
+          const clinicId = get().currentUser?.clinicId;
+          if (!clinicId) throw new Error("User has no clinic ID");
+          const [patients, inventory, appointments, visits, suppliers, labTests, settings] = await Promise.all([
             db.getPatients(),
             db.getInventory(),
             db.getAppointments(),
             db.getVisits(),
             db.getSuppliers(),
+            db.getLabTests(),
+            db.getSettings(clinicId),
           ]);
-          set({ patients, inventory, appointments, visits, suppliers });
+          set({ patients, inventory, appointments, visits, suppliers, labTests, settings });
         } catch (e) {
           console.error('Data fetch failed despite connection check.', e);
           get().actions.loadMockData();
@@ -165,7 +170,14 @@ const useStore = create<AppState>((set, get) => ({
       });
       get().actions.showToast('Offline Mode: Using local demo data.', 'info');
     },
-    login: (user) => {
+    login: async (user) => {
+      const { data, error } = await supabase.from('profiles').select('clinic_id').eq('id', user.id).single();
+      if (error) {
+        console.error("Error fetching profile", error);
+      } else {
+        user.clinicId = data.clinic_id;
+      }
+
       set({ currentUser: user });
       localStorage.setItem('juaafya_demo_user', JSON.stringify(user));
       get().actions.fetchData();
@@ -205,11 +217,26 @@ const useStore = create<AppState>((set, get) => ({
         set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) }));
       }, 3000);
     },
+    logInventoryAction: (item, action, quantityChange, notes) => {
+      const log: InventoryLog = {
+          id: `LOG-${Date.now()}`,
+          itemId: item.id,
+          itemName: item.name,
+          action,
+          quantityChange,
+          notes,
+          timestamp: new Date().toISOString(),
+          user: get().currentUser?.name || 'System'
+      };
+      set((state) => ({ inventoryLogs: [log, ...state.inventoryLogs] }));
+    },
     addPatient: async (patient) => {
       try {
         let newPatient = patient;
         if (!get().isDemoMode) {
-          const saved = await db.createPatient(patient);
+          const clinicId = get().currentUser?.clinicId;
+          if (!clinicId) throw new Error("User has no clinic ID");
+          const saved = await db.createPatient(patient, clinicId);
           if (saved) newPatient = saved;
         }
         set((state) => ({ patients: [newPatient, ...state.patients] }));
@@ -245,11 +272,13 @@ const useStore = create<AppState>((set, get) => ({
       try {
         let newItem = item;
         if (!get().isDemoMode) {
-          const saved = await db.createInventoryItem(item);
+          const clinicId = get().currentUser?.clinicId;
+          if (!clinicId) throw new Error("User has no clinic ID");
+          const saved = await db.createInventoryItem(item, clinicId);
           if (saved) newItem = saved;
         }
         set((state) => ({ inventory: [newItem, ...state.inventory] }));
-        // logInventoryAction(newItem, 'Created', newItem.stock, 'Initial stock entry');
+        get().actions.logInventoryAction(newItem, 'Created', newItem.stock, 'Initial stock entry');
         get().actions.showToast(`${newItem.name} added to inventory.`);
       } catch (e) {
         get().actions.showToast('Error creating item', 'error');
@@ -258,13 +287,13 @@ const useStore = create<AppState>((set, get) => ({
     updateInventoryItem: async (updatedItem, reason = 'Updated details') => {
       try {
         if (!get().isDemoMode) await db.updateInventoryItem(updatedItem);
-        // const oldItem = get().inventory.find((i) => i.id === updatedItem.id);
-        // const stockDiff = updatedItem.stock - (oldItem?.stock || 0);
-        // if (stockDiff !== 0) {
-        //   logInventoryAction(updatedItem, stockDiff > 0 ? 'Restocked' : 'Dispensed', stockDiff, reason);
-        // } else {
-        //   logInventoryAction(updatedItem, 'Updated', 0, reason);
-        // }
+        const oldItem = get().inventory.find((i) => i.id === updatedItem.id);
+        const stockDiff = updatedItem.stock - (oldItem?.stock || 0);
+        if (stockDiff !== 0) {
+          get().actions.logInventoryAction(updatedItem, stockDiff > 0 ? 'Restocked' : 'Dispensed', stockDiff, reason);
+        } else {
+          get().actions.logInventoryAction(updatedItem, 'Updated', 0, reason);
+        }
         set((state) => ({
           inventory: state.inventory.map((i) => (i.id === updatedItem.id ? updatedItem : i)),
         }));
@@ -276,8 +305,8 @@ const useStore = create<AppState>((set, get) => ({
     deleteInventoryItem: async (id) => {
       try {
         if (!get().isDemoMode) await db.deleteInventoryItem(id);
-        // const item = get().inventory.find((i) => i.id === id);
-        // if (item) logInventoryAction(item, 'Deleted', -item.stock, 'Item removed');
+        const item = get().inventory.find((i) => i.id === id);
+        if (item) get().actions.logInventoryAction(item, 'Deleted', -item.stock, 'Item removed');
         set((state) => ({ inventory: state.inventory.filter((i) => i.id !== id) }));
         get().actions.showToast(`Item removed.`, 'info');
       } catch (e) {
@@ -288,7 +317,9 @@ const useStore = create<AppState>((set, get) => ({
       try {
         let newSupplier = supplier;
         if (!get().isDemoMode) {
-          const saved = await db.createSupplier(supplier);
+          const clinicId = get().currentUser?.clinicId;
+          if (!clinicId) throw new Error("User has no clinic ID");
+          const saved = await db.createSupplier(supplier, clinicId);
           if (saved) newSupplier = saved;
         }
         set((state) => ({ suppliers: [...state.suppliers, newSupplier] }));
@@ -326,7 +357,9 @@ const useStore = create<AppState>((set, get) => ({
       try {
         let createdAppt = newAppt;
         if (!get().isDemoMode) {
-          const saved = await db.createAppointment(newAppt);
+          const clinicId = get().currentUser?.clinicId;
+          if (!clinicId) throw new Error("User has no clinic ID");
+          const saved = await db.createAppointment(newAppt, clinicId);
           if (saved) createdAppt = saved;
         }
         set((state) => ({ appointments: [...state.appointments, createdAppt] }));
@@ -366,15 +399,17 @@ const useStore = create<AppState>((set, get) => ({
             labOrders: [],
             prescription: [],
             medicationsDispensed: false,
-            consultationFee: 500,
-            totalBill: 500,
+            consultationFee: get().settings.consultation_fee || 500,
+            totalBill: get().settings.consultation_fee || 500,
             paymentStatus: 'Pending',
         };
 
         try {
             let createdVisit = newVisit;
             if (!get().isDemoMode) {
-                const saved = await db.createVisit(newVisit);
+                const clinicId = get().currentUser?.clinicId;
+                if (!clinicId) throw new Error("User has no clinic ID");
+                const saved = await db.createVisit(newVisit, clinicId);
                 if (saved) createdVisit = saved;
             }
             set((state) => ({ visits: [...state.visits, createdVisit] }));
@@ -402,7 +437,7 @@ const useStore = create<AppState>((set, get) => ({
                 const newStock = Math.max(0, item.stock - med.quantity);
                 updatedInventory[itemIndex] = { ...item, stock: newStock };
 
-                // logInventoryAction(item, 'Dispensed', -med.quantity, `Prescription for ${visit.patientName}`);
+                get().actions.logInventoryAction(item, 'Dispensed', -med.quantity, `Prescription for ${visit.patientName}`);
                 if (!get().isDemoMode) db.updateInventoryItem(updatedInventory[itemIndex]); // Async update
             }
         });

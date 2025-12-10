@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
+import Fuse from 'fuse.js';
 import { InventoryItem, Supplier, InventoryLog, Visit } from '../types';
 import { 
   Search, Plus, Package, AlertCircle, Filter, X, Check, Edit2, 
@@ -108,12 +109,11 @@ const Pharmacy: React.FC<PharmacyProps> = ({
 
     // 1. Search
     if (searchTerm) {
-        const lowerTerm = searchTerm.toLowerCase();
-        data = data.filter(item => 
-            item.name.toLowerCase().includes(lowerTerm) || 
-            item.batchNumber?.toLowerCase().includes(lowerTerm) ||
-            item.id.toLowerCase().includes(lowerTerm)
-        );
+        const fuse = new Fuse(data, {
+            keys: ['name', 'batchNumber', 'id'],
+            threshold: 0.3,
+        });
+        data = fuse.search(searchTerm).map(result => result.item);
     }
 
     // 2. Filters

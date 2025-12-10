@@ -33,6 +33,7 @@ const App: React.FC = () => {
     inventoryLogs,
     visits,
     settings,
+    labTests,
     currentUser,
     toasts,
     actions,
@@ -101,6 +102,7 @@ const App: React.FC = () => {
       visits,
       patients,
       inventory,
+      labTests,
       addVisit: actions.addVisit,
       updateVisit: actions.updateVisit,
       onCompleteVisit: actions.completeVisit

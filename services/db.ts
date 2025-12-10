@@ -33,7 +33,7 @@ export const db = {
         }));
     },
     
-    createPatient: async (patient: Patient): Promise<Patient> => {
+    createPatient: async (patient: Patient, clinicId: string): Promise<Patient> => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { id, ...payload } = patient; // Remove temporary ID
         
@@ -45,6 +45,7 @@ export const db = {
             notes: payload.notes,
             history: payload.history,
             vitals: payload.vitals,
+            clinic_id: clinicId,
             last_visit: payload.lastVisit
         }).select().single();
 
@@ -102,7 +103,7 @@ export const db = {
         }));
     },
 
-    createInventoryItem: async (item: InventoryItem): Promise<InventoryItem> => {
+    createInventoryItem: async (item: InventoryItem, clinicId: string): Promise<InventoryItem> => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { id, ...payload } = item;
         
@@ -115,7 +116,8 @@ export const db = {
             price: payload.price,
             batch_number: payload.batchNumber,
             expiry_date: payload.expiryDate,
-            supplier_id: payload.supplierId
+            supplier_id: payload.supplierId,
+            clinic_id: clinicId
         }).select().single();
 
         if (error) throw error;
@@ -170,7 +172,7 @@ export const db = {
         }));
     },
 
-    createAppointment: async (appt: Appointment): Promise<Appointment> => {
+    createAppointment: async (appt: Appointment, clinicId: string): Promise<Appointment> => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { id, ...payload } = appt;
         
@@ -180,7 +182,8 @@ export const db = {
             date: payload.date,
             time: payload.time,
             reason: payload.reason,
-            status: payload.status
+            status: payload.status,
+            clinic_id: clinicId
         }).select().single();
 
         if (error) throw error;
@@ -233,7 +236,7 @@ export const db = {
         }));
     },
 
-    createVisit: async (visit: Visit): Promise<Visit> => {
+    createVisit: async (visit: Visit, clinicId: string): Promise<Visit> => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { id, ...payload } = visit;
         
@@ -254,7 +257,8 @@ export const db = {
             payment_status: payload.paymentStatus,
             chief_complaint: payload.chiefComplaint,
             diagnosis: payload.diagnosis,
-            doctor_notes: payload.doctorNotes
+            doctor_notes: payload.doctorNotes,
+            clinic_id: clinicId
         }).select().single();
 
         if (error) throw error;
@@ -316,7 +320,7 @@ export const db = {
         }));
     },
 
-    createSupplier: async (supplier: Supplier): Promise<Supplier> => {
+    createSupplier: async (supplier: Supplier, clinicId: string): Promise<Supplier> => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { id, ...payload } = supplier;
         
@@ -324,7 +328,8 @@ export const db = {
             name: payload.name,
             contact_person: payload.contactPerson,
             phone: payload.phone,
-            email: payload.email
+            email: payload.email,
+            clinic_id: clinicId
         }).select().single();
 
         if (error) throw error;
@@ -352,5 +357,19 @@ export const db = {
     deleteSupplier: async (id: string) => {
         const { error } = await supabase.from('suppliers').delete().eq('id', id);
         if (error) throw error;
+    },
+
+    // --- Lab Tests ---
+    getLabTests: async (): Promise<any[]> => {
+        const { data, error } = await supabase.from('lab_tests').select('*');
+        if (error) throw error;
+        return data || [];
+    },
+
+    // --- Settings ---
+    getSettings: async (clinicId: string): Promise<any> => {
+        const { data, error } = await supabase.from('settings').select('*').eq('clinic_id', clinicId).single();
+        if (error) throw error;
+        return data;
     }
 };

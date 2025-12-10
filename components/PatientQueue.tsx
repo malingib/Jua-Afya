@@ -13,13 +13,14 @@ interface PatientQueueProps {
   visits: Visit[];
   patients: Patient[];
   inventory: InventoryItem[];
+  labTests: LabTestProfile[];
   addVisit: (patientId: string, priority?: VisitPriority, insurance?: any, skipVitals?: boolean) => void;
   updateVisit: (visit: Visit) => void;
   onCompleteVisit?: (visit: Visit) => void;
   restrictedStages?: VisitStage[]; // New prop to filter the dashboard view
 }
 
-const PatientQueue: React.FC<PatientQueueProps> = ({ visits, patients, inventory, addVisit, updateVisit, onCompleteVisit, restrictedStages }) => {
+const PatientQueue: React.FC<PatientQueueProps> = ({ visits, patients, inventory, labTests, addVisit, updateVisit, onCompleteVisit, restrictedStages }) => {
   // If restricted stages provided, default to the first one, otherwise Check-In
   const [activeStage, setActiveStage] = useState<VisitStage>(restrictedStages ? restrictedStages[0] : 'Check-In');
   const [showCheckInModal, setShowCheckInModal] = useState(false);
@@ -361,7 +362,7 @@ const PatientQueue: React.FC<PatientQueueProps> = ({ visits, patients, inventory
                                     <div className="relative group mb-2">
                                          <input placeholder="Search labs..." className="w-full p-2 text-sm bg-slate-50 dark:bg-slate-700 rounded-lg outline-none dark:text-white" />
                                          <div className="hidden group-hover:block absolute top-full left-0 right-0 bg-white dark:bg-slate-700 shadow-xl border dark:border-slate-600 z-10 max-h-40 overflow-y-auto rounded-b-lg">
-                                            {MOCK_LAB_TESTS.map(test => (
+                                             {labTests.map(test => (
                                                 <div key={test.id} onClick={() => addToLabs(test)} className="p-2 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer text-sm flex justify-between dark:text-white">
                                                     <span>{test.name}</span>
                                                     <span className="text-xs opacity-50">{test.price}</span>
