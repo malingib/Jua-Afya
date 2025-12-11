@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
-import { TeamMember, ClinicSettings } from '../types';
+import React, { useState } from 'react';
+import { TeamMember } from '../types';
 import { Lock, Mail, ChevronRight, Activity, Eye, EyeOff, Globe, Phone, ShieldCheck, User, Zap, Building2, ArrowRight, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 

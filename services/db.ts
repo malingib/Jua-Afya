@@ -336,21 +336,5 @@ export const db = {
             phone: data.phone,
             email: data.email
         };
-    },
-
-    updateSupplier: async (supplier: Supplier) => {
-        const { error } = await supabase.from('suppliers').update({
-            name: supplier.name,
-            contact_person: supplier.contactPerson,
-            phone: supplier.phone,
-            email: supplier.email
-        }).eq('id', supplier.id);
-
-        if (error) throw error;
-    },
-
-    deleteSupplier: async (id: string) => {
-        const { error } = await supabase.from('suppliers').delete().eq('id', id);
-        if (error) throw error;
     }
 };
